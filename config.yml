@@ -1,0 +1,59 @@
+# Configuration for Push-to-Talk Transcription Script
+
+# --------------------- Logging Configuration ---------------------
+Logging: 
+  log_dir: "logs/push_to_logs"
+  log_level: "DEBUG" 
+  log_to_console: false
+  console_log_level: "INFO"  
+
+LogCleanup: 
+  cleanup_enabled: true
+  retention_strategy: "time"  # Options: "time", "size"
+  retention_days: 7
+  max_log_files: 10
+
+# --------------------- Transcription Settings ---------------------
+key_combination:
+  - ctrl
+  - alt
+  - space
+
+save_directory: "transcriptions"
+
+model_support:
+  available_models:
+    - "tiny"
+    - "base"
+    - "small"
+    - "medium"
+    - "large"
+  default_model: "base"
+
+# Audio settings
+samplerate: 16000  # Whisper expects 16kHz
+channels: 1         # Mono audio
+dtype: "float32"    # Data type for audio
+
+use_fp16: false  # Set to true for GPU machines
+
+# --------------------- GUI Settings ---------------------
+gui_settings:
+  always_on_top: true  # Set to false to disable "always-on-top"
+
+# --------------------- Key Listener Settings ---------------------
+key_listener_sleep: 0.1  # Sleep time in seconds between key listener checks
+
+# --------------------- System Resource Monitoring ---------------------
+enable_system_monitoring: true  # Set to false to disable system resource logging
+system_monitoring_interval: 60  # Interval in seconds between system resource logs
+
+# --------------------- Progress Bar Settings ---------------------
+progress_bar_enabled: true  # Enable or disable the progress bar
+
+# --------------------- Documentation Settings ---------------------
+documentation_file: "README.md"  # Path to the documentation/help file
+
+# --------------------- Key Combination Configuration ---------------------
+key_combination_config:
+  configurable_via_gui: true  # Allow key combination to be set via GUI

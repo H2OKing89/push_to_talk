@@ -1,0 +1,8 @@
+sounddevice
+numpy
+whisper
+keyboard
+pyautogui
+pyyaml
+pystray
+pillow
