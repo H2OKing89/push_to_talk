@@ -1,59 +1,47 @@
-# Configuration for Push-to-Talk Transcription Script
+# --------------------- General Settings ---------------------
+key_combination: ['ctrl', 'alt', 'space']   # Key combination to toggle recording
+save_directory: 'transcriptions'            # Directory for saving transcriptions (not used anymore, but can be retained)
+use_fp16: False                             # Use FP16 precision for faster inference, not recommended on unsupported GPUs
 
-# --------------------- Logging Configuration ---------------------
-Logging: 
-  log_dir: "logs/push_to_logs"
-  log_level: "DEBUG" 
-  log_to_console: false
-  console_log_level: "INFO"  
-
-LogCleanup: 
-  cleanup_enabled: true
-  retention_strategy: "time"  # Options: "time", "size"
-  retention_days: 7
-  max_log_files: 10
-
-# --------------------- Transcription Settings ---------------------
-key_combination:
-  - ctrl
-  - alt
-  - space
-
-save_directory: "transcriptions"
-
+# --------------------- Model Support ---------------------
 model_support:
-  available_models:
-    - "tiny"
-    - "base"
-    - "small"
-    - "medium"
-    - "large"
-  default_model: "base"
+  default_model: 'base'                     # Default Whisper model to use
+  available_models: ['tiny', 'base', 'small', 'medium', 'large']  # Available Whisper models
 
-# Audio settings
-samplerate: 16000  # Whisper expects 16kHz
-channels: 1         # Mono audio
-dtype: "float32"    # Data type for audio
-
-use_fp16: false  # Set to true for GPU machines
+# --------------------- Audio Settings ---------------------
+samplerate: 16000                           # Audio sample rate for recording
+channels: 1                                 # Number of audio channels
+dtype: 'float32'                            # Data type for the audio input
+buffer_max_duration: 120                    # Maximum buffer duration in seconds (though this may no longer apply)
 
 # --------------------- GUI Settings ---------------------
 gui_settings:
-  always_on_top: true  # Set to false to disable "always-on-top"
+  always_on_top: True                       # Set the GUI window to always stay on top
+  enable_dark_mode: True                    # Enable dark mode
+  log_to_console: True                      # Enable logging output to console
+  resizable: True                           # Allow the window to be resizable
+  enable_waveform_display: True             # Enable real-time waveform display
 
-# --------------------- Key Listener Settings ---------------------
-key_listener_sleep: 0.1  # Sleep time in seconds between key listener checks
+# --------------------- System Monitoring Settings ---------------------
+enable_system_monitoring: True              # Enable system performance monitoring
+system_monitoring_interval: 60              # Interval in seconds to check system performance
 
-# --------------------- System Resource Monitoring ---------------------
-enable_system_monitoring: true  # Set to false to disable system resource logging
-system_monitoring_interval: 60  # Interval in seconds between system resource logs
+# --------------------- Logging Settings ---------------------
+Logging:
+  log_level: 'INFO'                         # Logging level, can be 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
+  log_dir: 'logs/push_to_logs'              # Directory where logs will be stored
+  log_to_console: True                      # Enable logging to console
+  console_log_level: 'INFO'                 # Log level for console logging
 
-# --------------------- Progress Bar Settings ---------------------
-progress_bar_enabled: true  # Enable or disable the progress bar
+# --------------------- Log Cleanup Settings ---------------------
+LogCleanup:
+  cleanup_enabled: True                     # Enable log cleanup
+  retention_strategy: 'time'                # Retention strategy: 'time' or 'size'
+  retention_days: 7                         # Retain logs for 7 days
+  max_log_files: 10                         # Retain up to 10 log files (if using size-based retention)
 
-# --------------------- Documentation Settings ---------------------
-documentation_file: "README.md"  # Path to the documentation/help file
+# --------------------- Progress Bar ---------------------
+progress_bar_enabled: True                  # Enable progress bar during transcription
 
-# --------------------- Key Combination Configuration ---------------------
-key_combination_config:
-  configurable_via_gui: true  # Allow key combination to be set via GUI
+# --------------------- Language Support ---------------------
+language: 'english'                         # Default language for transcription

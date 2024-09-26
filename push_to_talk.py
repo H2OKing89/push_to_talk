@@ -21,13 +21,16 @@ import sys
 
 # -----------------------------------------------------------------------------
 # Push-to-Talk Transcription Application
-# Version: 1.0.0
+# Version: 1.2.0
 # Author: Quentin
 # Released: September 2024
 # -----------------------------------------------------------------------------
 #
 # Version History:
 # -----------------------------------------------------------------------------
+# Version 1.2.0 (September 2024):
+# - Disabled saving of transcription and audio files.
+#
 # Version 1.0.0 (September 2024):
 # - Initial release with basic transcription using Whisper models.
 # - Configurable via a YAML file for key combinations, model selection, and GUI settings.
@@ -526,8 +529,6 @@ def transcribe_audio(audio_data, gui):
         gui.start_progress()
 
         # Transcribe the audio
-        # Note: whisper.transcribe expects audio as a numpy array or file path
-        # Depending on the Whisper version, adjust accordingly
         result = model.transcribe(audio_data, fp16=USE_FP16)
         transcription = result['text'].strip()
         logging.info(f"Transcription: {transcription}", extra={'correlation_id': correlation_id})
@@ -535,20 +536,10 @@ def transcribe_audio(audio_data, gui):
         # Update GUI with transcription
         if transcription:
             gui.append_transcription(transcription)
-            # Type out the transcription
             pyautogui.write(transcription + ' ')
             logging.info("Transcription typed out on screen.", extra={'correlation_id': correlation_id})
 
-        # Save transcription to file
-        timestamp = get_timestamp()
-        filename = f"transcription_{timestamp}.txt"
-        filepath = os.path.join(SAVE_DIR, filename)
-        with open(filepath, 'w', encoding='utf-8') as f:
-            f.write(transcription)
-        logging.info(f"Transcription saved to {filepath}", extra={'correlation_id': correlation_id})
-
-        # Save audio file
-        save_audio(audio_data, timestamp)
+        # Saving audio and transcription is disabled in this version (1.2.0)
 
         # Log system usage after transcription
         if ENABLE_SYSTEM_MONITORING:
@@ -564,18 +555,10 @@ def transcribe_audio(audio_data, gui):
         # Stop progress bar
         gui.stop_progress()
 
+# Audio saving functionality has been removed as requested.
 def save_audio(audio_data, timestamp):
-    """Saves the recorded audio to a WAV file."""
-    if not SOUND_FILE_AVAILABLE:
-        logging.warning("soundfile not available. Skipping audio saving.", extra={'correlation_id': correlation_id})
-        return
-    try:
-        filename = f"audio_{timestamp}.wav"
-        filepath = os.path.join(SAVE_DIR, filename)
-        sf.write(filepath, audio_data, SAMPLERATE)
-        logging.info(f"Audio saved to {filepath}", extra={'correlation_id': correlation_id})
-    except Exception as e:
-        logging.error(f"Failed to save audio file: {e}", extra={'correlation_id': correlation_id})
+    """No longer saving the recorded audio to a file."""
+    pass
 
 def audio_callback(indata, frames, time_info, status, gui):
     """Callback function to capture audio data."""
