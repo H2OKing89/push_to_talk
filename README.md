@@ -1,7 +1,3 @@
-Sure! Here's the updated `README.md` for your **Push-to-Talk Transcription Application** with your Discord link instead of an email.
-
----
-
 # Push-to-Talk Transcription Application
 
 ## Overview
@@ -228,6 +224,3 @@ For any inquiries or support, please contact me via **Discord**:
 
 - **Discord:** [https://discordapp.com/users/211993573204164618/](https://discordapp.com/users/211993573204164618/)
 
----
-
-Let me know if this works for you, or if you'd like any further modifications!
