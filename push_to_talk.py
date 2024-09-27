@@ -18,16 +18,23 @@ import psutil
 import winsound
 import sys
 
-
 # -----------------------------------------------------------------------------
 # Push-to-Talk Transcription Application
-# Version: 1.2.0
+# Version: 1.2.2
 # Author: Quentin
 # Released: September 2024
 # -----------------------------------------------------------------------------
 #
 # Version History:
 # -----------------------------------------------------------------------------
+# Version 1.2.2 (September 2024):
+# - Implemented various improvements for performance, error handling, and UI enhancements.
+# - Added configuration toggles for audio recording and transcription saving.
+#
+# Version 1.2.1 (September 2024):
+# - Added recording timeout functionality to automatically stop recording after a set duration.
+# - Enhanced logging for timeout events.
+#
 # Version 1.2.0 (September 2024):
 # - Disabled saving of transcription and audio files.
 #
@@ -188,6 +195,10 @@ USE_FP16 = config.get('use_fp16', False)
 PROGRESS_BAR_ENABLED = config.get('progress_bar_enabled', True)
 DOCUMENTATION_FILE = get_absolute_path(config.get('documentation_file', 'README.md'))
 KEY_COMBINATION_CONFIGURABLE = config.get('key_combination_config', {}).get('configurable_via_gui', True)
+RECORDING_TIMEOUT = config.get('recording_timeout', 60)  # seconds
+BUFFER_MAX_DURATION = config.get('BUFFER_MAX_DURATION', 120)  # seconds
+RECORD_AUDIO = config.get('record_audio', True)
+SAVE_TRANSCRIPTION = config.get('save_transcription', False)
 
 # Ensure the save directory exists
 os.makedirs(SAVE_DIR, exist_ok=True)
@@ -258,11 +269,37 @@ class TranscriptionGUI:
             self.available_keys = ['ctrl', 'alt', 'shift', 'space', 'cmd']  # Extend as needed
             self.key_vars = {key: tk.BooleanVar(value=(key in KEY_COMBINATION)) for key in self.available_keys}
 
+            self.key_checkbuttons = []  # To keep references to Checkbutton widgets
             for key in self.available_keys:
-                ttk.Checkbutton(self.key_combo_frame, text=key.upper(), variable=self.key_vars[key]).pack(side=tk.LEFT, padx=5)
+                cb = ttk.Checkbutton(self.key_combo_frame, text=key.upper(), variable=self.key_vars[key])
+                cb.pack(side=tk.LEFT, padx=5)
+                self.key_checkbuttons.append(cb)
 
             self.save_keys_button = ttk.Button(self.key_combo_frame, text="Save Keys", command=self.save_key_combination)
             self.save_keys_button.pack(side=tk.LEFT, padx=5)
+
+        # Toggles for Recording and Saving Transcriptions
+        self.toggle_frame = ttk.LabelFrame(root, text="Settings")
+        self.toggle_frame.pack(pady=10, padx=10, fill="x")
+
+        self.record_audio_var = tk.BooleanVar(value=RECORD_AUDIO)
+        self.save_transcription_var = tk.BooleanVar(value=SAVE_TRANSCRIPTION)
+
+        self.record_audio_cb = ttk.Checkbutton(
+            self.toggle_frame,
+            text="Enable Audio Recording",
+            variable=self.record_audio_var,
+            command=self.toggle_record_audio
+        )
+        self.record_audio_cb.pack(side=tk.LEFT, padx=10)
+
+        self.save_transcription_cb = ttk.Checkbutton(
+            self.toggle_frame,
+            text="Enable Transcription Saving",
+            variable=self.save_transcription_var,
+            command=self.toggle_save_transcription
+        )
+        self.save_transcription_cb.pack(side=tk.LEFT, padx=10)
 
         # Exit Button
         self.exit_button = ttk.Button(root, text="Exit", command=self.on_exit)
@@ -270,6 +307,7 @@ class TranscriptionGUI:
 
         # Recording state
         self.is_recording = False
+        self.timeout_timer = None  # To keep track of the recording timeout timer
 
         # Bind a method to update the status
         self.update_status("Idle")
@@ -283,6 +321,8 @@ class TranscriptionGUI:
         create_tooltip(self.model_combobox, "Select the Whisper model to use for transcription.")
         if KEY_COMBINATION_CONFIGURABLE:
             create_tooltip(self.save_keys_button, "Save the selected key combination for toggling recording.")
+        create_tooltip(self.record_audio_cb, "Toggle to enable or disable audio recording.")
+        create_tooltip(self.save_transcription_cb, "Toggle to enable or disable saving transcriptions.")
 
     def show_user_guide(self):
         """Displays the user guide in a new window."""
@@ -354,6 +394,30 @@ class TranscriptionGUI:
         keys = ' + '.join([key.upper() for key in KEY_COMBINATION])
         self.instructions_label.config(text=f"Press '{keys}' to toggle recording.")
 
+        # Restart key listener with the new key combination
+        restart_key_listener(self)
+
+    def toggle_record_audio(self):
+        """Toggles audio recording on or off based on the config."""
+        global RECORD_AUDIO
+        RECORD_AUDIO = self.record_audio_var.get()
+        config['record_audio'] = RECORD_AUDIO
+        with open(get_absolute_path("config.yml"), 'w') as file:
+            yaml.dump(config, file)
+        logging.info(f"Audio recording toggled to: {'Enabled' if RECORD_AUDIO else 'Disabled'}", extra={'correlation_id': correlation_id})
+        if not RECORD_AUDIO and self.is_recording:
+            # If recording is disabled while recording is active, stop recording
+            stop_recording(self)
+
+    def toggle_save_transcription(self):
+        """Toggles transcription saving on or off based on the config."""
+        global SAVE_TRANSCRIPTION
+        SAVE_TRANSCRIPTION = self.save_transcription_var.get()
+        config['save_transcription'] = SAVE_TRANSCRIPTION
+        with open(get_absolute_path("config.yml"), 'w') as file:
+            yaml.dump(config, file)
+        logging.info(f"Transcription saving toggled to: {'Enabled' if SAVE_TRANSCRIPTION else 'Disabled'}", extra={'correlation_id': correlation_id})
+
     def update_status(self, status):
         """Updates the status label in the GUI."""
         self.status_label.config(text=f"Status: {status}")
@@ -384,8 +448,27 @@ class TranscriptionGUI:
         if messagebox.askokcancel("Quit", "Do you want to quit?"):
             logging.info("Application closed by user.", extra={'correlation_id': correlation_id})
             should_exit = True
+            self.cancel_timeout_timer()  # Cancel any active timers
             self.exit_button.config(state='disabled')  # Disable the button to prevent multiple clicks
             self.root.quit()
+
+    def start_timeout_timer(self):
+        """Starts the recording timeout timer."""
+        self.timeout_timer = threading.Timer(RECORDING_TIMEOUT, self.timeout_stop_recording)
+        self.timeout_timer.start()
+        logging.info(f"Recording timeout set to {RECORDING_TIMEOUT} seconds.", extra={'correlation_id': correlation_id})
+
+    def cancel_timeout_timer(self):
+        """Cancels the recording timeout timer if it exists."""
+        if self.timeout_timer is not None:
+            self.timeout_timer.cancel()
+            self.timeout_timer = None
+            logging.info("Recording timeout timer cancelled.", extra={'correlation_id': correlation_id})
+
+    def timeout_stop_recording(self):
+        """Stops recording due to timeout."""
+        logging.info(f"Recording stopped automatically after {RECORDING_TIMEOUT} seconds timeout.", extra={'correlation_id': correlation_id})
+        stop_recording(self)
 
 # --------------------- Tooltip Helper Class ---------------------
 
@@ -438,7 +521,7 @@ class CreateToolTip(object):
 
     def hidetip(self):
         tw = self.tw
-        self.tw= None
+        self.tw = None
         if tw:
             tw.destroy()
 
@@ -466,8 +549,9 @@ model = load_whisper_model()
 # Global variables
 audio_buffer = []
 lock = threading.Lock()
-BUFFER_MAX_DURATION = config.get('BUFFER_MAX_DURATION', 120)  # seconds
 should_exit = False  # For thread control
+listener_thread = None  # To be initialized in main
+timeout_lock = threading.Lock()  # To protect access to the timer
 
 # Progress bar control
 transcription_thread = None
@@ -495,6 +579,9 @@ def clear_buffer_if_needed():
 
 def start_recording(gui):
     """Starts recording audio."""
+    if not RECORD_AUDIO:
+        logging.info("Audio recording is disabled via configuration.", extra={'correlation_id': correlation_id})
+        return
     play_start_sound()
     with lock:
         if not gui.is_recording:
@@ -502,14 +589,18 @@ def start_recording(gui):
             audio_buffer.clear()
             gui.update_status("Recording")
             logging.info("Recording started.", extra={'correlation_id': correlation_id})
+            gui.start_timeout_timer()  # Start the timeout timer
 
 def stop_recording(gui):
     """Stops recording and initiates transcription."""
+    if not gui.is_recording:
+        return
     play_stop_sound()
     with lock:
         if gui.is_recording:
             gui.is_recording = False
             gui.update_status("Transcribing")
+            gui.cancel_timeout_timer()  # Cancel the timeout timer
             logging.info("Recording stopped. Starting transcription.", extra={'correlation_id': correlation_id})
             if audio_buffer:
                 # Concatenate and flatten the audio data
@@ -529,6 +620,11 @@ def transcribe_audio(audio_data, gui):
         gui.start_progress()
 
         # Transcribe the audio
+        # Convert audio_data to float32 numpy array if necessary
+        if audio_data.dtype != np.float32:
+            audio_data = audio_data.astype(np.float32)
+
+        # Whisper expects audio in float32 format
         result = model.transcribe(audio_data, fp16=USE_FP16)
         transcription = result['text'].strip()
         logging.info(f"Transcription: {transcription}", extra={'correlation_id': correlation_id})
@@ -536,10 +632,12 @@ def transcribe_audio(audio_data, gui):
         # Update GUI with transcription
         if transcription:
             gui.append_transcription(transcription)
+            if SAVE_TRANSCRIPTION:
+                save_transcription(transcription)
             pyautogui.write(transcription + ' ')
             logging.info("Transcription typed out on screen.", extra={'correlation_id': correlation_id})
 
-        # Saving audio and transcription is disabled in this version (1.2.0)
+        # Saving audio and transcription is disabled in this version (1.2.0) unless SAVE_TRANSCRIPTION is enabled
 
         # Log system usage after transcription
         if ENABLE_SYSTEM_MONITORING:
@@ -554,6 +652,18 @@ def transcribe_audio(audio_data, gui):
     finally:
         # Stop progress bar
         gui.stop_progress()
+
+def save_transcription(transcription):
+    """Saves the transcription to a file."""
+    try:
+        timestamp = get_timestamp()
+        transcription_file = os.path.join(SAVE_DIR, f"transcription_{timestamp}.txt")
+        with open(transcription_file, 'w', encoding='utf-8') as f:
+            f.write(transcription)
+        logging.info(f"Transcription saved to {transcription_file}", extra={'correlation_id': correlation_id})
+    except Exception as e:
+        logging.error(f"Failed to save transcription: {e}", extra={'correlation_id': correlation_id})
+        messagebox.showerror("Error", f"Failed to save transcription: {e}")
 
 # Audio saving functionality has been removed as requested.
 def save_audio(audio_data, timestamp):
@@ -631,6 +741,8 @@ except ImportError:
 
 def main():
     """Main function to run the transcription GUI and audio stream."""
+    global listener_thread  # Declare as global to modify within the function
+
     # Initialize GUI
     root = tk.Tk()
     gui = TranscriptionGUI(root)
@@ -663,6 +775,18 @@ def main():
         exit(1)
     finally:
         logging.info("Application has exited gracefully.", extra={'correlation_id': correlation_id})
+
+def restart_key_listener(gui):
+    """Restarts the key listener to apply new key combinations."""
+    global listener_thread
+    # Signal to exit the current key listener
+    global should_exit
+    should_exit = True
+    listener_thread.join()
+    should_exit = False
+    # Start a new key listener thread with updated key combination
+    listener_thread = threading.Thread(target=key_listener, args=(gui,), daemon=True)
+    listener_thread.start()
 
 if __name__ == "__main__":
     main()
