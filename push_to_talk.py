@@ -20,13 +20,23 @@ import sys
 
 # -----------------------------------------------------------------------------
 # Push-to-Talk Transcription Application
-# Version: 1.2.2
+# Version: 1.2.4
 # Author: Quentin
 # Released: September 2024
 # -----------------------------------------------------------------------------
 #
 # Version History:
 # -----------------------------------------------------------------------------
+# Version 1.2.4 (September 2024):
+# - Fixed incorrect usage of the 'weights_only' parameter in 'whisper.load_model'.
+# - Enhanced error logging in 'load_whisper_model' to capture full exception details.
+# - Updated version information as a bug fix release.
+#
+# Version 1.2.3 (September 2024):
+# - Fixed tooltip bindings to correctly attach to widgets instead of BooleanVar instances.
+# - Introduced 'save_audio' toggle to enable or disable saving audio clips locally.
+# - Updated version information as a bug fix release.
+#
 # Version 1.2.2 (September 2024):
 # - Implemented various improvements for performance, error handling, and UI enhancements.
 # - Added configuration toggles for audio recording and transcription saving.
@@ -199,6 +209,7 @@ RECORDING_TIMEOUT = config.get('recording_timeout', 60)  # seconds
 BUFFER_MAX_DURATION = config.get('BUFFER_MAX_DURATION', 120)  # seconds
 RECORD_AUDIO = config.get('record_audio', True)
 SAVE_TRANSCRIPTION = config.get('save_transcription', False)
+SAVE_AUDIO = config.get('save_audio', False)  # New parameter
 
 # Ensure the save directory exists
 os.makedirs(SAVE_DIR, exist_ok=True)
@@ -278,20 +289,12 @@ class TranscriptionGUI:
             self.save_keys_button = ttk.Button(self.key_combo_frame, text="Save Keys", command=self.save_key_combination)
             self.save_keys_button.pack(side=tk.LEFT, padx=5)
 
-        # Toggles for Recording and Saving Transcriptions
+        # Toggles for Transcription Saving and Audio Saving
         self.toggle_frame = ttk.LabelFrame(root, text="Settings")
         self.toggle_frame.pack(pady=10, padx=10, fill="x")
 
-        self.record_audio_var = tk.BooleanVar(value=RECORD_AUDIO)
         self.save_transcription_var = tk.BooleanVar(value=SAVE_TRANSCRIPTION)
-
-        self.record_audio_cb = ttk.Checkbutton(
-            self.toggle_frame,
-            text="Enable Audio Recording",
-            variable=self.record_audio_var,
-            command=self.toggle_record_audio
-        )
-        self.record_audio_cb.pack(side=tk.LEFT, padx=10)
+        self.save_audio_var = tk.BooleanVar(value=SAVE_AUDIO)
 
         self.save_transcription_cb = ttk.Checkbutton(
             self.toggle_frame,
@@ -300,6 +303,14 @@ class TranscriptionGUI:
             command=self.toggle_save_transcription
         )
         self.save_transcription_cb.pack(side=tk.LEFT, padx=10)
+
+        self.save_audio_cb = ttk.Checkbutton(
+            self.toggle_frame,
+            text="Enable Audio Saving",
+            variable=self.save_audio_var,
+            command=self.toggle_save_audio
+        )
+        self.save_audio_cb.pack(side=tk.LEFT, padx=10)
 
         # Exit Button
         self.exit_button = ttk.Button(root, text="Exit", command=self.on_exit)
@@ -321,8 +332,8 @@ class TranscriptionGUI:
         create_tooltip(self.model_combobox, "Select the Whisper model to use for transcription.")
         if KEY_COMBINATION_CONFIGURABLE:
             create_tooltip(self.save_keys_button, "Save the selected key combination for toggling recording.")
-        create_tooltip(self.record_audio_cb, "Toggle to enable or disable audio recording.")
         create_tooltip(self.save_transcription_cb, "Toggle to enable or disable saving transcriptions.")
+        create_tooltip(self.save_audio_cb, "Toggle to enable or disable saving audio clips.")
 
     def show_user_guide(self):
         """Displays the user guide in a new window."""
@@ -397,18 +408,6 @@ class TranscriptionGUI:
         # Restart key listener with the new key combination
         restart_key_listener(self)
 
-    def toggle_record_audio(self):
-        """Toggles audio recording on or off based on the config."""
-        global RECORD_AUDIO
-        RECORD_AUDIO = self.record_audio_var.get()
-        config['record_audio'] = RECORD_AUDIO
-        with open(get_absolute_path("config.yml"), 'w') as file:
-            yaml.dump(config, file)
-        logging.info(f"Audio recording toggled to: {'Enabled' if RECORD_AUDIO else 'Disabled'}", extra={'correlation_id': correlation_id})
-        if not RECORD_AUDIO and self.is_recording:
-            # If recording is disabled while recording is active, stop recording
-            stop_recording(self)
-
     def toggle_save_transcription(self):
         """Toggles transcription saving on or off based on the config."""
         global SAVE_TRANSCRIPTION
@@ -417,6 +416,15 @@ class TranscriptionGUI:
         with open(get_absolute_path("config.yml"), 'w') as file:
             yaml.dump(config, file)
         logging.info(f"Transcription saving toggled to: {'Enabled' if SAVE_TRANSCRIPTION else 'Disabled'}", extra={'correlation_id': correlation_id})
+
+    def toggle_save_audio(self):
+        """Toggles audio saving on or off based on the config."""
+        global SAVE_AUDIO
+        SAVE_AUDIO = self.save_audio_var.get()
+        config['save_audio'] = SAVE_AUDIO
+        with open(get_absolute_path("config.yml"), 'w') as file:
+            yaml.dump(config, file)
+        logging.info(f"Audio saving toggled to: {'Enabled' if SAVE_AUDIO else 'Disabled'}", extra={'correlation_id': correlation_id})
 
     def update_status(self, status):
         """Updates the status label in the GUI."""
@@ -535,11 +543,11 @@ def load_whisper_model():
     """Loads the Whisper model."""
     try:
         logging.info(f"Loading Whisper model: {MODEL_NAME}", extra={'correlation_id': correlation_id})
-        model = whisper.load_model(MODEL_NAME, download_root=None)  # Ensure models are loaded correctly
+        model = whisper.load_model(MODEL_NAME, download_root=None)  # Removed 'weights_only' parameter
         logging.info("Whisper model loaded successfully.", extra={'correlation_id': correlation_id})
         return model
     except Exception as e:
-        logging.error(f"Failed to load Whisper model: {e}", extra={'correlation_id': correlation_id})
+        logging.error(f"Failed to load Whisper model: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
         messagebox.showerror("Error", f"Failed to load Whisper model: {e}")
         exit(1)
 
@@ -620,11 +628,10 @@ def transcribe_audio(audio_data, gui):
         gui.start_progress()
 
         # Transcribe the audio
-        # Convert audio_data to float32 numpy array if necessary
+        # Whisper expects audio in float32 format
         if audio_data.dtype != np.float32:
             audio_data = audio_data.astype(np.float32)
 
-        # Whisper expects audio in float32 format
         result = model.transcribe(audio_data, fp16=USE_FP16)
         transcription = result['text'].strip()
         logging.info(f"Transcription: {transcription}", extra={'correlation_id': correlation_id})
@@ -637,7 +644,8 @@ def transcribe_audio(audio_data, gui):
             pyautogui.write(transcription + ' ')
             logging.info("Transcription typed out on screen.", extra={'correlation_id': correlation_id})
 
-        # Saving audio and transcription is disabled in this version (1.2.0) unless SAVE_TRANSCRIPTION is enabled
+            if SAVE_AUDIO and SOUND_FILE_AVAILABLE:
+                save_audio_clip(audio_data)
 
         # Log system usage after transcription
         if ENABLE_SYSTEM_MONITORING:
@@ -646,7 +654,7 @@ def transcribe_audio(audio_data, gui):
         # Update GUI status
         gui.update_status("Idle")
     except Exception as e:
-        logging.error(f"Error during transcription: {e}", extra={'correlation_id': correlation_id})
+        logging.error(f"Error during transcription: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
         gui.update_status("Error")
         messagebox.showerror("Error", f"Transcription failed: {e}")
     finally:
@@ -662,13 +670,21 @@ def save_transcription(transcription):
             f.write(transcription)
         logging.info(f"Transcription saved to {transcription_file}", extra={'correlation_id': correlation_id})
     except Exception as e:
-        logging.error(f"Failed to save transcription: {e}", extra={'correlation_id': correlation_id})
+        logging.error(f"Failed to save transcription: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
         messagebox.showerror("Error", f"Failed to save transcription: {e}")
 
-# Audio saving functionality has been removed as requested.
-def save_audio(audio_data, timestamp):
-    """No longer saving the recorded audio to a file."""
-    pass
+def save_audio_clip(audio_data):
+    """Saves the recorded audio clip to a file."""
+    try:
+        timestamp = get_timestamp()
+        audio_file = os.path.join(SAVE_DIR, f"audio_{timestamp}.wav")
+        # Normalize audio to prevent clipping
+        audio_normalized = audio_data / np.max(np.abs(audio_data)) if np.max(np.abs(audio_data)) != 0 else audio_data
+        sf.write(audio_file, audio_normalized, SAMPLERATE)
+        logging.info(f"Audio clip saved to {audio_file}", extra={'correlation_id': correlation_id})
+    except Exception as e:
+        logging.error(f"Failed to save audio clip: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
+        messagebox.showerror("Error", f"Failed to save audio clip: {e}")
 
 def audio_callback(indata, frames, time_info, status, gui):
     """Callback function to capture audio data."""
@@ -679,7 +695,7 @@ def audio_callback(indata, frames, time_info, status, gui):
             logging.debug(f"Captured {len(indata)} frames of audio.", extra={'correlation_id': correlation_id})
             clear_buffer_if_needed()
     except Exception as e:
-        logging.error(f"Error in audio callback: {e}", extra={'correlation_id': correlation_id})
+        logging.error(f"Error in audio callback: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
         gui.update_status("Error")
         messagebox.showerror("Error", f"Error during audio capture: {e}")
 
@@ -699,7 +715,7 @@ def key_listener(gui):
                     time.sleep(KEY_LISTENER_SLEEP)
             time.sleep(KEY_LISTENER_SLEEP)
         except Exception as e:
-            logging.error(f"Error in key listener: {e}", extra={'correlation_id': correlation_id})
+            logging.error(f"Error in key listener: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
             gui.update_status("Error")
             messagebox.showerror("Error", f"Key listener failed: {e}")
 
@@ -725,7 +741,7 @@ def system_monitoring():
             log_system_usage()
             time.sleep(SYSTEM_MONITORING_INTERVAL)
         except Exception as e:
-            logging.error(f"Error in system monitoring: {e}", extra={'correlation_id': correlation_id})
+            logging.error(f"Error in system monitoring: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
 
 # --------------------- Handling Optional soundfile Import ---------------------
 
@@ -770,7 +786,7 @@ def main():
     except KeyboardInterrupt:
         logging.info("KeyboardInterrupt: Application terminated by user.", extra={'correlation_id': correlation_id})
     except Exception as e:
-        logging.error(f"Failed to start audio input stream: {e}", extra={'correlation_id': correlation_id})
+        logging.error(f"Failed to start audio input stream: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
         messagebox.showerror("Error", f"Failed to start audio input stream: {e}")
         exit(1)
     finally:

@@ -7,8 +7,8 @@ LogCleanup:
 Logging:
   console_log_level: INFO
   log_dir: logs/push_to_logs
-  log_level: DEBUG
-  log_to_console: false
+  log_level: INFO
+  log_to_console: true
 channels: 1
 documentation_file: README.md
 dtype: float32
@@ -34,6 +34,7 @@ progress_bar_enabled: true
 record_audio: true
 recording_timeout: 60
 samplerate: 16000
+save_audio: false
 save_directory: transcriptions
 save_transcription: false
 system_monitoring_interval: 60
