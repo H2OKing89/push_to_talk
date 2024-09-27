@@ -4,5 +4,9 @@ whisper
 keyboard
 pyautogui
 pyyaml
-pystray
-pillow
+python-json-logger
+psutil
+winsound; platform_system == "Windows"
+matplotlib
+soundfile
+Pillow

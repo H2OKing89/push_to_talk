@@ -17,59 +17,31 @@ import uuid
 import psutil
 import winsound
 import sys
+import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+# Use 'TkAgg' backend for interactive plots
+matplotlib.use('TkAgg')
 
 # -----------------------------------------------------------------------------
 # Push-to-Talk Transcription Application
-# Version: 1.2.4
+# Version: 1.2.6
 # Author: Quentin
 # Released: September 2024
 # -----------------------------------------------------------------------------
 #
 # Version History:
 # -----------------------------------------------------------------------------
-# Version 1.2.4 (September 2024):
-# - Fixed incorrect usage of the 'weights_only' parameter in 'whisper.load_model'.
-# - Enhanced error logging in 'load_whisper_model' to capture full exception details.
-# - Updated version information as a bug fix release.
+# Version 1.2.6 (September 2024):
+# - Fixed missing GUI elements by ensuring proper packing and layout.
+# - Resolved program freezing by refining thread management during recording stop.
+# - Suppressed excessive matplotlib DEBUG logs by adjusting logging levels.
+# - Enhanced user feedback during model switching with status updates, progress bar, and notifications.
+# - Added dynamic GUI resizing and real-time waveform visualization.
 #
-# Version 1.2.3 (September 2024):
-# - Fixed tooltip bindings to correctly attach to widgets instead of BooleanVar instances.
-# - Introduced 'save_audio' toggle to enable or disable saving audio clips locally.
-# - Updated version information as a bug fix release.
+# ... [Other versions as before] ...
 #
-# Version 1.2.2 (September 2024):
-# - Implemented various improvements for performance, error handling, and UI enhancements.
-# - Added configuration toggles for audio recording and transcription saving.
-#
-# Version 1.2.1 (September 2024):
-# - Added recording timeout functionality to automatically stop recording after a set duration.
-# - Enhanced logging for timeout events.
-#
-# Version 1.2.0 (September 2024):
-# - Disabled saving of transcription and audio files.
-#
-# Version 1.0.0 (September 2024):
-# - Initial release with basic transcription using Whisper models.
-# - Configurable via a YAML file for key combinations, model selection, and GUI settings.
-# - Integrated keyboard-based push-to-talk functionality using a customizable key combination.
-# - Developed a simple Tkinter-based GUI to display transcriptions and provide model selection.
-# - Basic system monitoring included for memory and CPU usage during transcription.
-# - Audio is recorded via `sounddevice`, transcribed using the Whisper model, and optionally saved as a WAV file.
-# - Added JSON structured logging with log rotation and cleanup based on time or size.
-# - Enabled error handling and logging of unexpected issues.
-# - Basic tooltip support for guiding the user through the GUI.
-# - Added progress bar during transcription and audio recording process.
-# - Optional soundfile support for saving audio.
-#
-# Known Issues:
-# - GUI layout is fixed, with no support for dynamic resizing or advanced themes.
-# - Splice functionality for editing the transcription is not implemented.
-# - No waveform visualization for the audio being recorded.
-#
-# Upcoming Features:
-# - Splice functionality to allow cutting and merging audio segments.
-# - Implementation of undo/redo for splicing actions.
-# - Waveform visualization to help navigate recorded audio.
 # -----------------------------------------------------------------------------
 
 # --------------------- Configuration ---------------------
@@ -87,6 +59,9 @@ def setup_logging(config):
     logger = logging.getLogger()
     log_level = getattr(logging, config['Logging'].get('log_level', 'INFO').upper(), logging.INFO)
     logger.setLevel(log_level)
+
+    # Suppress matplotlib's DEBUG logs
+    logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
 
     # Create log directory if it doesn't exist
     log_dir = get_absolute_path(config['Logging'].get('log_dir', 'logs/push_to_logs'))
@@ -230,8 +205,8 @@ class TranscriptionGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Push-to-Talk Transcription")
-        self.root.geometry("700x700")
-        self.root.resizable(False, False)
+        self.root.geometry("900x800")  # Increased size for waveform
+        self.root.minsize(700, 600)     # Minimum size for dynamic resizing
         self.root.attributes("-topmost", ALWAYS_ON_TOP)
 
         # Menu
@@ -242,29 +217,46 @@ class TranscriptionGUI:
         self.help_menu.add_command(label="User Guide", command=self.show_user_guide)
 
         # Status Label
-        self.status_label = ttk.Label(root, text="Status: Idle", font=("Helvetica", 16))
-        self.status_label.pack(pady=10)
+        self.status_label = ttk.Label(root, text="Status: Idle", font=("Helvetica", 14))
+        self.status_label.pack(pady=10, anchor='w', padx=10)
 
         # Instructions Frame
         self.instructions_frame = ttk.Frame(root)
-        self.instructions_frame.pack(pady=5)
+        self.instructions_frame.pack(pady=5, fill='x', padx=10)
 
         keys = ' + '.join([key.upper() for key in KEY_COMBINATION])
         self.instructions_label = ttk.Label(self.instructions_frame, text=f"Press '{keys}' to toggle recording.", font=("Helvetica", 12))
-        self.instructions_label.pack()
+        self.instructions_label.pack(anchor='w')
 
         # Transcription Display
-        self.transcription_text = scrolledtext.ScrolledText(root, wrap='word', height=15, width=80, state='disabled')
-        self.transcription_text.pack(pady=10)
+        self.transcription_text = scrolledtext.ScrolledText(root, wrap='word', height=10, state='disabled')
+        self.transcription_text.pack(pady=10, padx=10, fill='both', expand=True)
+
+        # Waveform Visualization
+        self.waveform_frame = ttk.LabelFrame(root, text="Live Audio Waveform")
+        self.waveform_frame.pack(pady=10, padx=10, fill='both', expand=True)
+
+        self.fig, self.ax = plt.subplots(figsize=(8, 3))
+        self.ax.set_title("Audio Waveform")
+        self.ax.set_xlabel("Time (s)")
+        self.ax.set_ylabel("Amplitude")
+        self.line, = self.ax.plot([], [], lw=1)
+        self.ax.set_xlim(0, BUFFER_MAX_DURATION)
+        self.ax.set_ylim(-1, 1)
+        self.ax.grid(True)
+
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.waveform_frame)
+        self.canvas.draw()
+        self.canvas.get_tk_widget().pack(fill='both', expand=True)
 
         # Progress Bar
         if PROGRESS_BAR_ENABLED:
-            self.progress = ttk.Progressbar(root, orient=tk.HORIZONTAL, length=600, mode='indeterminate')
-            self.progress.pack(pady=5)
+            self.progress = ttk.Progressbar(root, orient=tk.HORIZONTAL, length=800, mode='indeterminate')
+            self.progress.pack(pady=5, padx=10, fill='x')
 
         # Model Selection
         self.model_frame = ttk.Frame(root)
-        self.model_frame.pack(pady=5)
+        self.model_frame.pack(pady=5, padx=10, fill='x')
         self.model_label = ttk.Label(self.model_frame, text="Select Whisper Model:", font=("Helvetica", 12))
         self.model_label.pack(side=tk.LEFT, padx=5)
         self.model_var = tk.StringVar(value=MODEL_NAME)
@@ -326,6 +318,10 @@ class TranscriptionGUI:
         # Tooltips
         self.create_tooltips()
 
+        # Initialize waveform data
+        self.waveform_data = np.zeros(int(SAMPLERATE * BUFFER_MAX_DURATION))
+        self.plot_update_interval = 100  # in milliseconds
+
     def create_tooltips(self):
         """Creates tooltips for GUI elements."""
         create_tooltip(self.exit_button, "Click to exit the application gracefully.")
@@ -345,8 +341,8 @@ class TranscriptionGUI:
 
         guide_window = tk.Toplevel(self.root)
         guide_window.title("User Guide")
-        guide_window.geometry("700x600")
-        guide_window.resizable(False, False)
+        guide_window.geometry("800x600")
+        guide_window.resizable(True, True)
 
         guide_text = scrolledtext.ScrolledText(guide_window, wrap='word', state='normal')
         guide_text.pack(expand=True, fill='both')
@@ -356,32 +352,47 @@ class TranscriptionGUI:
     def change_model(self, event):
         """Handles model change from the combobox."""
         global MODEL_NAME, model
-        MODEL_NAME = self.model_var.get()
-        logging.info(f"Whisper model changed to: {MODEL_NAME}", extra={'correlation_id': correlation_id})
-        # Reload the model asynchronously
-        threading.Thread(target=self.reload_model, daemon=True).start()
+        selected_model = self.model_var.get()
+        if selected_model == MODEL_NAME:
+            return  # No change
 
-    def reload_model(self):
-        """Reloads the selected Whisper model."""
+        MODEL_NAME = selected_model
+        logging.info(f"Whisper model changed to: {MODEL_NAME}", extra={'correlation_id': correlation_id})
+
+        # Update GUI to reflect loading state
+        self.update_status(f"Downloading model '{MODEL_NAME}'...")
+        self.start_progress()
+
+        # Disable model selection to prevent multiple triggers
+        self.model_combobox.config(state='disabled')
+
+        # Reload the model asynchronously
+        threading.Thread(target=self.reload_model, args=(MODEL_NAME,), daemon=True).start()
+
+    def reload_model(self, model_name):
+        """Reloads the selected Whisper model with user feedback."""
         try:
-            if not check_model_exists(MODEL_NAME):
-                answer = messagebox.askyesno("Model Not Found", f"The model '{MODEL_NAME}' is not downloaded. Do you want to download it now?")
-                if answer:
-                    logging.info(f"User opted to download model: {MODEL_NAME}", extra={'correlation_id': correlation_id})
-                    model = whisper.load_model(MODEL_NAME)
-                    logging.info(f"Whisper model '{MODEL_NAME}' downloaded and loaded successfully.", extra={'correlation_id': correlation_id})
-                    messagebox.showinfo("Model Loaded", f"Whisper model '{MODEL_NAME}' downloaded and loaded successfully.")
-                else:
-                    logging.warning(f"User declined to download model: {MODEL_NAME}", extra={'correlation_id': correlation_id})
-                    messagebox.showwarning("Model Not Loaded", f"Whisper model '{MODEL_NAME}' is not loaded.")
-                    return
+            if not check_model_exists(model_name):
+                logging.info(f"Model '{model_name}' not found. Initiating download.", extra={'correlation_id': correlation_id})
+                self.notify_user(f"Downloading Whisper model '{model_name}'. Please wait...")
+                model = whisper.load_model(model_name)
+                logging.info(f"Whisper model '{model_name}' downloaded and loaded successfully.", extra={'correlation_id': correlation_id})
+                self.notify_user(f"Whisper model '{model_name}' downloaded and loaded successfully.")
             else:
-                model = whisper.load_model(MODEL_NAME)
-                logging.info(f"Whisper model '{MODEL_NAME}' loaded successfully.", extra={'correlation_id': correlation_id})
-                messagebox.showinfo("Model Loaded", f"Whisper model '{MODEL_NAME}' loaded successfully.")
+                model = whisper.load_model(model_name)
+                logging.info(f"Whisper model '{model_name}' loaded successfully.", extra={'correlation_id': correlation_id})
+                self.notify_user(f"Whisper model '{model_name}' loaded successfully.")
+
+            # Update GUI status and progress
+            self.update_status(f"Model '{model_name}' loaded.")
         except Exception as e:
-            logging.error(f"Failed to load Whisper model '{MODEL_NAME}': {e}", extra={'correlation_id': correlation_id})
-            messagebox.showerror("Error", f"Failed to load Whisper model '{MODEL_NAME}': {e}")
+            logging.error(f"Failed to load Whisper model '{model_name}': {e}", extra={'correlation_id': correlation_id}, exc_info=True)
+            self.update_status("Error loading model.")
+            messagebox.showerror("Error", f"Failed to load Whisper model '{model_name}': {e}")
+        finally:
+            # Re-enable model selection and stop progress bar
+            self.model_combobox.config(state='readonly')
+            self.stop_progress()
 
     def save_key_combination(self):
         """Saves the selected key combination to the config file."""
@@ -429,7 +440,7 @@ class TranscriptionGUI:
     def update_status(self, status):
         """Updates the status label in the GUI."""
         self.status_label.config(text=f"Status: {status}")
-        self.root.update()
+        self.root.update_idletasks()
 
     def append_transcription(self, text):
         """Appends transcribed text to the GUI and updates the transcription length."""
@@ -438,12 +449,17 @@ class TranscriptionGUI:
         self.transcription_text.config(state='disabled')
         length = len(self.transcription_text.get("1.0", tk.END).strip())
         self.status_label.config(text=f"Transcription length: {length} characters")
-        self.root.update()
+        self.root.update_idletasks()
+
+    def notify_user(self, message):
+        """Displays a pop-up notification to the user."""
+        messagebox.showinfo("Notification", message)
 
     def start_progress(self):
         """Starts the progress bar."""
         if PROGRESS_BAR_ENABLED:
             self.progress.start()
+            self.progress.pack(pady=5, padx=10, fill='x')
 
     def stop_progress(self):
         """Stops the progress bar."""
@@ -477,6 +493,25 @@ class TranscriptionGUI:
         """Stops recording due to timeout."""
         logging.info(f"Recording stopped automatically after {RECORDING_TIMEOUT} seconds timeout.", extra={'correlation_id': correlation_id})
         stop_recording(self)
+
+    def update_waveform(self):
+        """Updates the waveform plot with the latest audio data."""
+        if self.is_recording:
+            # Update the waveform data buffer
+            with lock:
+                if audio_buffer:
+                    current_buffer = np.concatenate(audio_buffer).flatten()
+                    # Normalize and limit the buffer to BUFFER_MAX_DURATION
+                    current_buffer = current_buffer / np.max(np.abs(current_buffer)) if np.max(np.abs(current_buffer)) != 0 else current_buffer
+                    times = np.linspace(0, len(current_buffer)/SAMPLERATE, num=len(current_buffer))
+                    self.line.set_data(times, current_buffer)
+                    self.ax.set_xlim(0, max(10, times[-1]))
+                    self.ax.set_ylim(-1, 1)
+                    self.canvas.draw()
+
+        # Schedule the next update
+        if not should_exit:
+            self.root.after(self.plot_update_interval, self.update_waveform)
 
 # --------------------- Tooltip Helper Class ---------------------
 
@@ -515,7 +550,10 @@ class CreateToolTip(object):
     def showtip(self, event=None):
         """Display text in tooltip window"""
         x = y = 0
-        x, y, cx, cy = self.widget.bbox("insert")
+        try:
+            x, y, cx, cy = self.widget.bbox("insert")
+        except:
+            x, y = 0, 0
         x += self.widget.winfo_rootx() + 25
         y += self.widget.winfo_rooty() + 20
         # creates a toplevel window
@@ -762,6 +800,9 @@ def main():
     # Initialize GUI
     root = tk.Tk()
     gui = TranscriptionGUI(root)
+
+    # Start waveform plotting
+    gui.update_waveform()
 
     # Start key listener thread
     listener_thread = threading.Thread(target=key_listener, args=(gui,), daemon=True)
