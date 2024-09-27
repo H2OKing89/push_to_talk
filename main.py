@@ -2,7 +2,7 @@
 import tkinter as tk
 import threading
 import logging
-from config import load_config
+from config import load_config, save_config
 from logger import setup_logging
 from transcription import load_whisper_model
 from gui import TranscriptionGUI
@@ -104,6 +104,7 @@ def transcribe_audio(audio_data, gui):
         if audio_data.dtype != np.float32:
             audio_data = audio_data.astype(np.float32)
 
+        # Use Whisper model to transcribe
         result = model.transcribe(audio_data, fp16=config.get('use_fp16', False))
         transcription = result['text'].strip()
         logging.info(f"Transcription: {transcription}", extra={'correlation_id': correlation_id})

@@ -4,7 +4,7 @@ import os
 import logging
 from utils import get_absolute_path
 
-def load_config(config_filename="config.yml"):
+def load_config(config_filename="config.yaml"):
     """Loads the configuration from a YAML file."""
     try:
         config_path = get_absolute_path(config_filename)
@@ -21,7 +21,7 @@ def load_config(config_filename="config.yml"):
         logging.error(f"Failed to load configuration file: {e}")
         raise
 
-def save_config(config, config_filename="config.yml"):
+def save_config(config, config_filename="config.yaml"):
     """Saves the configuration to a YAML file."""
     try:
         config_path = get_absolute_path(config_filename)

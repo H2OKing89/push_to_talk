@@ -8,7 +8,7 @@ def get_absolute_path(relative_path):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(script_dir, relative_path)
 
-class CreateToolTip(object):
+class CreateToolTip:
     """
     Create a tooltip for a given widget
     """
@@ -42,20 +42,16 @@ class CreateToolTip(object):
 
     def showtip(self, event=None):
         """Display text in tooltip window"""
-        x = y = 0
-        try:
-            x, y, cx, cy = self.widget.bbox("insert")
-        except:
-            x, y = 0, 0
+        x, y, cx, cy = self.widget.bbox("insert") if self.widget.bbox("insert") else (0, 0, 0, 0)
         x += self.widget.winfo_rootx() + 25
         y += self.widget.winfo_rooty() + 20
         # creates a toplevel window
         self.tw = tk.Toplevel(self.widget)
         self.tw.wm_overrideredirect(True)  # removes all window managers
-        self.tw.wm_geometry(f"+{x}+{y}")
+        self.tw.wm_geometry("+%d+%d" % (x, y))
         label = tk.Label(self.tw, text=self.text, justify='left',
                          background="#ffffe0", relief='solid', borderwidth=1,
-                         wraplength=self.wraplength)
+                         font=("tahoma", "8", "normal"))
         label.pack(ipadx=1)
 
     def hidetip(self):

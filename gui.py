@@ -5,6 +5,7 @@ import threading
 import logging
 from preferences import PreferencesWindow
 from utils import get_absolute_path, create_tooltip
+from config import load_config  # Added import for load_config
 import pyautogui
 import numpy as np
 from datetime import datetime
@@ -15,11 +16,14 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 # Import shared state variables
 from state import lock, should_exit, audio_buffer
 
+from transcription import load_whisper_model  # Added import for load_whisper_model
+
 class TranscriptionGUI:
     def __init__(self, root, config, model, stop_recording_callback, correlation_id, on_model_change_callback):
         self.root = root
         self.config = config
         self.model = model
+        self.current_model_name = config.get('model_support', {}).get('default_model', 'base')  # Track model name
         self.stop_recording_callback = stop_recording_callback  # Callback to stop recording
         self.correlation_id = correlation_id
         self.on_model_change_callback = on_model_change_callback
@@ -36,8 +40,7 @@ class TranscriptionGUI:
 
         # Create GUI components
         self.create_menu()
-        self.create_widgets()
-        self.create_tooltips()
+        self.create_main_frame()
         self.setup_waveform_plot()
 
         # Start waveform updating
@@ -58,39 +61,71 @@ class TranscriptionGUI:
         self.menu.add_cascade(label="Help", menu=self.help_menu)
         self.help_menu.add_command(label="User Guide", command=self.show_user_guide)
 
-    def create_widgets(self):
-        """Creates and places all widgets in the GUI."""
-        # Status Label
-        self.status_label = ttk.Label(self.root, text="Status: Idle", font=("Helvetica", 12))
-        self.status_label.pack(pady=5, anchor='w', padx=10)
+    def create_main_frame(self):
+        """Creates and places all widgets in the main frame."""
+        self.main_frame = ttk.Frame(self.root, padding="10")
+        self.main_frame.pack(fill='both', expand=True)
 
-        # Instructions Label
+        # Status Frame
+        status_frame = ttk.Frame(self.main_frame)
+        status_frame.grid(row=0, column=0, sticky='ew', pady=(0, 10))
+        status_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(status_frame, text="Status:", font=("Helvetica", 12)).grid(row=0, column=0, sticky='w')
+        self.status_label = ttk.Label(status_frame, text="Idle", font=("Helvetica", 12))
+        self.status_label.grid(row=0, column=1, sticky='w', padx=(10, 0))
+        create_tooltip(self.status_label, "Current status of the application.")
+
+        # Instructions Frame
+        instructions_frame = ttk.Frame(self.main_frame)
+        instructions_frame.grid(row=1, column=0, sticky='ew', pady=(0, 10))
+        instructions_frame.columnconfigure(1, weight=1)
+
         keys = ' + '.join([key.upper() for key in self.config.get('key_combination', ['ctrl', 'alt', 'space'])])
-        self.instructions_label = ttk.Label(self.root, text=f"Press '{keys}' to toggle recording.", font=("Helvetica", 10))
-        self.instructions_label.pack(pady=5, anchor='w', padx=10)
+        ttk.Label(instructions_frame, text="Instructions:", font=("Helvetica", 10)).grid(row=0, column=0, sticky='w')
+        self.instructions_label = ttk.Label(instructions_frame, text=f"Press '{keys}' to toggle recording.", font=("Helvetica", 10))
+        self.instructions_label.grid(row=0, column=1, sticky='w', padx=(10, 0))
+        create_tooltip(self.instructions_label, "Key combination to start/stop recording.")
 
         # Transcription Display
-        self.transcription_text = scrolledtext.ScrolledText(self.root, wrap='word', height=10, state='disabled')
-        self.transcription_text.pack(pady=10, padx=10, fill='both', expand=True)
+        transcription_frame = ttk.LabelFrame(self.main_frame, text="Transcription")
+        transcription_frame.grid(row=2, column=0, sticky='nsew', pady=(0, 10))
+        transcription_frame.columnconfigure(0, weight=1)
+        transcription_frame.rowconfigure(0, weight=1)
+
+        self.transcription_text = scrolledtext.ScrolledText(transcription_frame, wrap='word', state='disabled')
+        self.transcription_text.grid(row=0, column=0, sticky='nsew', padx=5, pady=5)
+        create_tooltip(self.transcription_text, "Transcribed text will appear here.")
 
         # Waveform Visualization Frame
-        self.waveform_frame = ttk.LabelFrame(self.root, text="Live Audio Waveform")
-        self.waveform_frame.pack(pady=10, padx=10, fill='both', expand=True)
+        waveform_frame = ttk.LabelFrame(self.main_frame, text="Live Audio Waveform")
+        waveform_frame.grid(row=3, column=0, sticky='nsew', pady=(0, 10))
+        waveform_frame.columnconfigure(0, weight=1)
+        waveform_frame.rowconfigure(0, weight=1)
+
+        self.waveform_canvas = None  # Placeholder for waveform canvas
 
         # Progress Bar
-        self.progress = ttk.Progressbar(self.root, orient=tk.HORIZONTAL, length=800, mode='indeterminate')
-        # Initially hidden; will be shown when needed
+        self.progress = ttk.Progressbar(self.main_frame, orient=tk.HORIZONTAL, mode='indeterminate')
+        self.progress.grid(row=4, column=0, sticky='ew', pady=(0, 10))
 
         # Exit Button
-        self.exit_button = ttk.Button(self.root, text="Exit")
-        self.exit_button.pack(pady=5, padx=10, anchor='e')  # Positioned at the bottom-right
+        exit_frame = ttk.Frame(self.main_frame)
+        exit_frame.grid(row=5, column=0, sticky='e')
+
+        self.exit_button = ttk.Button(exit_frame, text="Exit", command=self.on_exit)
+        self.exit_button.pack()
+        create_tooltip(self.exit_button, "Click to exit the application.")
+
+        # Configure grid weights
+        self.main_frame.rowconfigure(2, weight=1)
+        self.main_frame.rowconfigure(3, weight=1)
+        self.main_frame.columnconfigure(0, weight=1)
 
     def create_tooltips(self):
         """Creates tooltips for GUI elements."""
-        # Example tooltips
-        create_tooltip(self.transcription_text, "Transcribed text will appear here.")
-        create_tooltip(self.exit_button, "Click to exit the application.")
-        # Add more tooltips as needed
+        # Example tooltips are already added in create_main_frame()
+        pass
 
     def setup_waveform_plot(self):
         """Sets up the waveform plot using matplotlib."""
@@ -99,13 +134,14 @@ class TranscriptionGUI:
         self.ax.set_xlabel("Time (s)")
         self.ax.set_ylabel("Amplitude")
         self.line, = self.ax.plot([], [], lw=1)
-        self.ax.set_xlim(0, self.config.get('BUFFER_MAX_DURATION', 120))
+        self.ax.set_xlim(0, self.config.get('max_recording_duration', 60))
         self.ax.set_ylim(-1, 1)
         self.ax.grid(True)
 
-        self.canvas = FigureCanvasTkAgg(self.fig, master=self.waveform_frame)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.main_frame)
         self.canvas.draw()
-        self.canvas.get_tk_widget().pack(fill='both', expand=True)
+        self.canvas.get_tk_widget().grid(row=3, column=0, sticky='nsew', padx=5, pady=5)
+        create_tooltip(self.canvas.get_tk_widget(), "Real-time audio waveform visualization.")
 
     def open_preferences(self):
         """Opens the preferences window."""
@@ -113,9 +149,39 @@ class TranscriptionGUI:
 
     def apply_preferences(self):
         """Applies preferences after saving."""
-        # Update transcription and audio saving settings
-        self.config['save_transcription'] = self.config.get('save_transcription', False)
-        self.config['save_audio'] = self.config.get('save_audio', False)
+        # Reload the configuration
+        try:
+            new_config = load_config()
+            self.config.update(new_config)
+            logging.info("Preferences updated successfully.", extra={'correlation_id': self.correlation_id})
+            messagebox.showinfo("Preferences", "Preferences updated successfully.")
+        except Exception as e:
+            logging.error(f"Failed to reload configuration: {e}", extra={'correlation_id': self.correlation_id}, exc_info=True)
+            messagebox.showerror("Error", f"Failed to reload configuration: {e}")
+
+        # Update GUI Settings
+        always_on_top = self.config.get('gui_settings', {}).get('always_on_top', True)
+        self.root.attributes("-topmost", always_on_top)
+
+        # Update Model Support if needed
+        default_model = self.config.get('model_support', {}).get('default_model', 'base')
+        if default_model != self.current_model_name:
+            try:
+                self.model = load_whisper_model(default_model, self.correlation_id)
+                self.current_model_name = default_model  # Update the tracked model name
+                logging.info(f"Switched to model: {default_model}", extra={'correlation_id': self.correlation_id})
+                messagebox.showinfo("Model Change", f"Switched to model: {default_model}")
+            except Exception as e:
+                logging.error(f"Failed to load model '{default_model}': {e}", extra={'correlation_id': self.correlation_id}, exc_info=True)
+                messagebox.showerror("Error", f"Failed to load model '{default_model}': {e}")
+
+        # Update Instructions label with new key combination
+        keys = ' + '.join([key.upper() for key in self.config.get('key_combination', ['ctrl', 'alt', 'space'])])
+        self.instructions_label.config(text=f"Press '{keys}' to toggle recording.")
+
+        # Update waveform x-axis limit
+        self.ax.set_xlim(0, self.config.get('max_recording_duration', 60))
+        self.canvas.draw()
 
     def show_user_guide(self):
         """Displays the user guide."""
@@ -155,12 +221,12 @@ class TranscriptionGUI:
     def start_progress(self):
         """Starts the progress bar."""
         self.progress.start()
-        self.progress.pack(pady=5, padx=10, fill='x')
+        self.progress.grid()
 
     def stop_progress(self):
         """Stops the progress bar."""
         self.progress.stop()
-        self.progress.pack_forget()
+        self.progress.grid_remove()
 
     def on_exit(self):
         """Handles graceful shutdown."""

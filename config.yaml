@@ -1,4 +1,3 @@
-max_recording_duration: 60  # Duration in seconds
 BUFFER_MAX_DURATION: 120
 LogCleanup:
   cleanup_enabled: true
@@ -8,14 +7,14 @@ LogCleanup:
 Logging:
   console_log_level: INFO
   log_dir: logs/push_to_logs
-  log_level: DEBUG
+  log_level: INFO
   log_to_console: false
 channels: 1
 documentation_file: README.md
 dtype: float32
 enable_system_monitoring: true
 gui_settings:
-  always_on_top: true
+  always_on_top: false
 key_combination:
 - ctrl
 - shift
@@ -23,6 +22,7 @@ key_combination:
 key_combination_config:
   configurable_via_gui: true
 key_listener_sleep: 0.1
+max_recording_duration: 60
 model_support:
   available_models:
   - tiny
