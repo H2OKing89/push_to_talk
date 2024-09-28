@@ -1,4 +1,3 @@
-# main.py
 import tkinter as tk
 import threading
 import logging
@@ -6,34 +5,39 @@ from config import load_config, save_config
 from logger import setup_logging
 from transcription import load_whisper_model
 from gui import TranscriptionGUI
-from audio_handler import start_audio_stream, save_audio_clip
+from audio_handler import start_audio_stream, save_audio_clip, AudioProcessingError
 import keyboard
 import pyautogui
 import numpy as np
 import time
 import psutil
-import winsound
 import sys
-import soundfile as sf
+import winsound  # For sound
 from datetime import datetime
 import os
-
-# Import shared state variables
 from state import lock, should_exit, audio_buffer, correlation_id
 
-# -----------------------------------------------------------------------------
-# Push-to-Talk Transcription Application
-# Version: 1.2.6
-# Author: Quentin
-# Released: September 2024
-# -----------------------------------------------------------------------------
-#
-# ... [Version history as before] ...
-#
-# -----------------------------------------------------------------------------
+# Retry decorator to retry function on failure
+def retry_on_failure(retries=3, delay=1):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            for attempt in range(retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    logging.error(f"Retrying due to error: {e}, Attempt {attempt + 1} of {retries}", 
+                                  extra={'correlation_id': correlation_id})
+                    time.sleep(delay)
+            raise e
+        return wrapper
+    return decorator
 
-# --------------------- Error Handling ---------------------
+@retry_on_failure()
+def load_model_with_retry(model_name):
+    """Attempts to load the model with retries."""
+    return load_whisper_model(model_name, correlation_id)
 
+# Error handling
 def handle_unexpected_error(type, value, traceback_obj):
     """Handles unexpected errors by logging them."""
     logging.critical(f"Unexpected error: {value}", exc_info=(type, value, traceback_obj), extra={'correlation_id': correlation_id})
@@ -42,8 +46,6 @@ def handle_unexpected_error(type, value, traceback_obj):
 # Hook into the system's exception handler
 sys.excepthook = handle_unexpected_error
 
-# --------------------- Key Functions ---------------------
-
 def audio_callback(indata, frames, time_info, status, gui):
     """Callback function to capture audio data."""
     try:
@@ -51,7 +53,6 @@ def audio_callback(indata, frames, time_info, status, gui):
             with lock:
                 audio_buffer.append(indata.copy())
             logging.debug(f"Captured {len(indata)} frames of audio.", extra={'correlation_id': correlation_id})
-            # Implement buffer clearing if needed
     except Exception as e:
         logging.error(f"Error in audio callback: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
         gui.update_status("Error")
@@ -69,7 +70,7 @@ def start_recording(gui, model, config):
             audio_buffer.clear()
             gui.update_status("Recording")
             logging.info("Recording started.", extra={'correlation_id': correlation_id})
-            gui.start_timeout_timer()  # Start the timeout timer
+            gui.start_timeout_timer()
 
 def stop_recording(gui):
     """Stops recording and initiates transcription."""
@@ -80,12 +81,10 @@ def stop_recording(gui):
         if gui.is_recording:
             gui.is_recording = False
             gui.update_status("Transcribing")
-            gui.stop_timeout_timer()  # Cancel the timeout timer
+            gui.stop_timeout_timer()
             logging.info("Recording stopped. Starting transcription.", extra={'correlation_id': correlation_id})
             if audio_buffer:
-                # Concatenate and flatten the audio data
                 audio_data = np.concatenate(audio_buffer, axis=0).flatten()
-                # Start transcription in a separate thread to avoid blocking the GUI
                 transcription_thread = threading.Thread(target=transcribe_audio, args=(audio_data, gui), daemon=True)
                 transcription_thread.start()
             else:
@@ -96,42 +95,27 @@ def stop_recording(gui):
 def transcribe_audio(audio_data, gui):
     """Transcribes the audio data and updates the GUI."""
     try:
-        # Start progress bar
         gui.start_progress()
-
-        # Transcribe the audio
-        # Whisper expects audio in float32 format
         if audio_data.dtype != np.float32:
             audio_data = audio_data.astype(np.float32)
-
-        # Use Whisper model to transcribe
         result = model.transcribe(audio_data, fp16=config.get('use_fp16', False))
         transcription = result['text'].strip()
         logging.info(f"Transcription: {transcription}", extra={'correlation_id': correlation_id})
-
-        # Update GUI with transcription
         if transcription:
             gui.append_transcription(transcription)
             if config.get('save_transcription', False):
                 save_transcription(transcription, config)
             pyautogui.write(transcription + ' ')
-            logging.info("Transcription typed out on screen.", extra={'correlation_id': correlation_id})
-
-            if config.get('save_audio', False) and SOUND_FILE_AVAILABLE:
-                save_audio_clip(audio_data, config.get('save_directory', 'transcriptions'), config.get('samplerate', 16000), correlation_id)
-
-        # Log system usage after transcription
+        if config.get('save_audio', False):
+            save_audio_clip(audio_data, config.get('save_directory', 'transcriptions'), config.get('samplerate', 16000), correlation_id)
         if config.get('enable_system_monitoring', True):
             log_system_usage()
-
-        # Update GUI status
         gui.update_status("Idle")
     except Exception as e:
         logging.error(f"Error during transcription: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
         gui.update_status("Error")
         tk.messagebox.showerror("Error", f"Transcription failed: {e}")
     finally:
-        # Stop progress bar
         gui.stop_progress()
 
 def save_transcription(transcription, config):
@@ -180,7 +164,6 @@ def key_listener(gui, config):
                     start_recording(gui, model, config)
                 else:
                     stop_recording(gui)
-                # Wait until keys are released to avoid multiple toggles
                 while all(keyboard.is_pressed(key) for key in keys):
                     time.sleep(config.get('key_listener_sleep', 0.1))
             time.sleep(config.get('key_listener_sleep', 0.1))
@@ -189,34 +172,25 @@ def key_listener(gui, config):
             gui.update_status("Error")
             tk.messagebox.showerror("Error", f"Key listener failed: {e}")
 
-# --------------------- Main Execution ---------------------
+def graceful_shutdown():
+    """Handles clean shutdown on exit."""
+    should_exit = True
+    if 'stream' in locals():
+        stream.stop()
+        stream.close()
+    logging.info("Application has exited gracefully.", extra={'correlation_id': correlation_id})
+    sys.exit(0)
 
+# Main execution
 if __name__ == "__main__":
-    # Load configuration
     config = load_config()
-
-    # Setup logging
     setup_logging(config, correlation_id)
-
-    # Handle unexpected errors
     sys.excepthook = handle_unexpected_error
+    model = load_model_with_retry(config.get('model_support', {}).get('default_model', 'base'))
 
-    # Determine if soundfile is available
-    try:
-        import soundfile as sf
-        SOUND_FILE_AVAILABLE = True
-    except ImportError:
-        logging.warning("soundfile library not installed. Audio will not be saved.", extra={'correlation_id': correlation_id})
-        SOUND_FILE_AVAILABLE = False
-
-    # Load Whisper model
-    model = load_whisper_model(config.get('model_support', {}).get('default_model', 'base'), correlation_id)
-
-    # Initialize GUI with a callback to stop recording
     root = tk.Tk()
     gui = TranscriptionGUI(root, config, model, lambda: stop_recording(gui), correlation_id, None)
 
-    # Start audio stream
     try:
         stream = start_audio_stream(
             callback=lambda indata, frames, time_info, status: audio_callback(indata, frames, time_info, status, gui),
@@ -224,31 +198,17 @@ if __name__ == "__main__":
             channels=config.get('channels', 1),
             dtype=config.get('dtype', 'float32')
         )
-    except Exception as e:
+    except AudioProcessingError as e:
         logging.error(f"Failed to start audio input stream: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
         tk.messagebox.showerror("Error", f"Failed to start audio input stream: {e}")
-        sys.exit(1)
+        graceful_shutdown()
 
-    # Start key listener thread
     listener_thread = threading.Thread(target=key_listener, args=(gui, config), daemon=True)
     listener_thread.start()
 
-    # Start system monitoring thread if enabled
     if config.get('enable_system_monitoring', True):
         system_monitor_thread = threading.Thread(target=log_system_usage, daemon=True)
         system_monitor_thread.start()
 
-    # Bind the exit button
-    gui.exit_button.config(command=gui.on_exit)
-
-    # Start the GUI loop
-    try:
-        root.mainloop()
-    except KeyboardInterrupt:
-        logging.info("KeyboardInterrupt: Application terminated by user.", extra={'correlation_id': correlation_id})
-    finally:
-        should_exit = True
-        if 'stream' in locals():
-            stream.stop()
-            stream.close()
-        logging.info("Application has exited gracefully.", extra={'correlation_id': correlation_id})
+    gui.exit_button.config(command=graceful_shutdown)
+    root.mainloop()

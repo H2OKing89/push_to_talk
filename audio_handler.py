@@ -1,13 +1,13 @@
-# audio_handler.py
 import sounddevice as sd
 import numpy as np
 import logging
 import soundfile as sf
 import os
 from datetime import datetime
-
-# Import shared state variables
 from state import correlation_id
+
+class AudioProcessingError(Exception):
+    pass
 
 def start_audio_stream(callback, samplerate, channels, dtype):
     """Starts the audio input stream."""
@@ -23,7 +23,7 @@ def start_audio_stream(callback, samplerate, channels, dtype):
         return stream
     except Exception as e:
         logging.error(f"Failed to start audio input stream: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
-        raise
+        raise AudioProcessingError(f"Error starting audio stream: {e}")
 
 def save_audio_clip(audio_data, save_dir, samplerate, correlation_id):
     """Saves the recorded audio clip to a file."""
@@ -37,4 +37,4 @@ def save_audio_clip(audio_data, save_dir, samplerate, correlation_id):
         logging.info(f"Audio clip saved to {audio_file}", extra={'correlation_id': correlation_id})
     except Exception as e:
         logging.error(f"Failed to save audio clip: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
-        raise
+        raise AudioProcessingError(f"Error saving audio clip: {e}")

@@ -1,3 +1,5 @@
+AudioBuffer:
+  max_duration_seconds: 300
 BUFFER_MAX_DURATION: 120
 LogCleanup:
   cleanup_enabled: true
@@ -7,7 +9,7 @@ LogCleanup:
 Logging:
   console_log_level: INFO
   log_dir: logs/push_to_logs
-  log_level: INFO
+  log_level: DEBUG
   log_to_console: false
 channels: 1
 documentation_file: README.md
