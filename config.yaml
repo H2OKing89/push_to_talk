@@ -8,7 +8,7 @@ Logging:
   enable_dynamic_log_level: true
   log_dir: logs/push_to_talk_logs
   log_format: json
-  log_level: WARNING
+  log_level: INFO
   log_to_console: false
 audio_device_index: 2
 channels: 1
@@ -31,7 +31,7 @@ model_support:
   - small
   - medium
   - large
-  default_model: small
+  default_model: medium
 record_audio: true
 samplerate: 16000
 save_audio: false
