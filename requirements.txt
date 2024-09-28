@@ -1,12 +1,24 @@
-sounddevice
-numpy
-whisper
-keyboard
-pyautogui
-pyyaml
-python-json-logger
-psutil
-winsound; platform_system == "Windows"
-matplotlib
-soundfile
-Pillow
+# Audio Processing
+sounddevice>=0.4.6
+soundfile>=0.10.3.post1
+numpy>=1.25.0
+
+# Configuration Management
+PyYAML>=6.0
+
+# Logging
+python-json-logger>=2.0.7
+
+# GUI and Visualization
+matplotlib>=3.7.1
+pyautogui==0.9.54  # Adjusted to the latest available version
+
+# System Monitoring and Control
+psutil>=5.9.5
+keyboard>=0.13.5
+
+# Whisper Transcription
+openai-whisper>=2023.3.14
+
+# Optional (for enhanced tooltip functionality)
+Pillow>=9.5.0
