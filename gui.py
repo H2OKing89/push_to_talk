@@ -18,8 +18,15 @@ import os
 from transcription import load_whisper_model
 from logger import sanitize_message, set_log_level
 
+# Set up module-specific logger
+logger = logging.getLogger(__name__)
+
 class TranscriptionGUI:
-    def __init__(self, root, config, model, stop_recording_callback, correlation_id, trace_id, on_model_change_callback, graceful_shutdown_callback):
+    def __init__(
+        self, root, config, model, stop_recording_callback,
+        correlation_id, trace_id, on_model_change_callback,
+        graceful_shutdown_callback
+    ):
         self.root = root
         self.config = config
         self.model = model
@@ -85,7 +92,11 @@ class TranscriptionGUI:
 
         keys = ' + '.join([key.upper() for key in self.config.get('key_combination', ['ctrl', 'alt', 'space'])])
         ttk.Label(instructions_frame, text="Instructions:", font=("Helvetica", 10)).grid(row=0, column=0, sticky='w')
-        self.instructions_label = ttk.Label(instructions_frame, text=f"Press '{keys}' to toggle recording.", font=("Helvetica", 10))
+        self.instructions_label = ttk.Label(
+            instructions_frame,
+            text=f"Press '{keys}' to toggle recording.",
+            font=("Helvetica", 10)
+        )
         self.instructions_label.grid(row=0, column=1, sticky='w', padx=(10, 0))
         create_tooltip(self.instructions_label, "Key combination to start/stop recording.")
 
@@ -144,9 +155,9 @@ class TranscriptionGUI:
     def open_preferences(self):
         """Opens the preferences window."""
         PreferencesWindow(
-            self.root, 
-            self.config, 
-            self.apply_preferences, 
+            self.root,
+            self.config,
+            self.apply_preferences,
             self.set_log_level,
             self.correlation_id,
             self.trace_id
@@ -155,7 +166,7 @@ class TranscriptionGUI:
     def set_log_level(self, new_level):
         """Sets the log level dynamically."""
         set_log_level(new_level)
-        logging.info(f"Log level changed to {new_level}", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
+        logger.info(f"Log level changed to {new_level}", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
 
     def apply_preferences(self):
         """Applies preferences after saving."""
@@ -163,11 +174,15 @@ class TranscriptionGUI:
         try:
             new_config = load_config()
             self.config.update(new_config)
-            logging.info("Preferences updated successfully.", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
+            logger.info("Preferences updated successfully.", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
             messagebox.showinfo("Preferences", "Preferences updated successfully.")
         except Exception as e:
             sanitized_error = sanitize_message(str(e))
-            logging.error(f"Failed to reload configuration: {sanitized_error}", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}, exc_info=True)
+            logger.error(
+                f"Failed to reload configuration: {sanitized_error}",
+                extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id},
+                exc_info=True
+            )
             messagebox.showerror("Error", f"Failed to reload configuration: {e}")
             return
 
@@ -211,9 +226,11 @@ class TranscriptionGUI:
                 self.root.after(0, self.stop_progress)
             except Exception as e:
                 sanitized_error = sanitize_message(str(e))
-                logging.error(f"Failed to load model '{model_name}': {sanitized_error}", 
-                              extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}, 
-                              exc_info=True)
+                logger.error(
+                    f"Failed to load model '{model_name}': {sanitized_error}",
+                    extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id},
+                    exc_info=True
+                )
                 self.root.after(0, self.stop_progress)
                 # Try to load a smaller model
                 fallback_models = ['base', 'small', 'tiny']
@@ -232,9 +249,11 @@ class TranscriptionGUI:
                         return
                     except Exception as e2:
                         sanitized_error2 = sanitize_message(str(e2))
-                        logging.error(f"Failed to load fallback model '{fallback_model}': {sanitized_error2}", 
-                                      extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}, 
-                                      exc_info=True)
+                        logger.error(
+                            f"Failed to load fallback model '{fallback_model}': {sanitized_error2}",
+                            extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id},
+                            exc_info=True
+                        )
                 self.root.after(0, tk.messagebox.showerror, "Model Load Error", f"Failed to load model '{model_name}' and fallback models.")
                 self.graceful_shutdown_callback()  # Call the graceful shutdown callback
         threading.Thread(target=load_model, daemon=True).start()
@@ -288,7 +307,7 @@ class TranscriptionGUI:
     def on_exit(self):
         """Handles graceful shutdown."""
         if messagebox.askokcancel("Quit", "Do you want to quit?"):
-            logging.info("Application closed by user.", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
+            logger.info("Application closed by user.", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
             self.graceful_shutdown_callback()
 
     def start_timeout_timer(self):
@@ -305,7 +324,7 @@ class TranscriptionGUI:
     def stop_recording_timeout(self):
         """Callback function to stop recording when the timer expires."""
         if self.is_recording:
-            logging.info("Max recording duration reached. Stopping recording.", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
+            logger.info("Max recording duration reached. Stopping recording.", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
             self.update_status("Idle")
             self.stop_recording_callback()
             self.stop_timeout_timer()

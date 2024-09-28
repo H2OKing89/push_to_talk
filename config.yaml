@@ -1,51 +1,58 @@
-AudioBuffer:
-  max_duration_seconds: 300
-BUFFER_MAX_DURATION: 120
-LogCleanup:
-  cleanup_enabled: true
-  max_log_files: 10
-  retention_days: 7
-  retention_strategy: time
-Logging:
-  console_log_level: INFO
-  enable_correlation_id: true
-  enable_dynamic_log_level: true
-  enable_trace_id: true
-  log_dir: logs/push_to_talk_logs
-  log_format: json
-  log_level: DEBUG
-  log_to_console: false
-  sanitize_logs: true
-audio_device_index: 2
-channels: 1
-documentation_file: README.md
-dtype: float32
-enable_noise_reduction: true
-enable_system_monitoring: true
-gui_settings:
-  always_on_top: false
-key_combination:
-- ctrl
-- shift
-- space
-key_combination_config:
-  configurable_via_gui: true
-key_listener_sleep: 0.1
-max_recording_duration: 60
+# Configuration file for Push-to-Talk Transcription Application
+
 model_support:
   available_models:
-  - tiny
-  - base
-  - small
-  - medium
-  - large
-  default_model: small
-progress_bar_enabled: true
-record_audio: true
-recording_timeout: 60
-samplerate: 16000
-save_audio: false
-save_directory: transcriptions
-save_transcription: false
-system_monitoring_interval: 60
-use_fp16: true
+    - tiny
+    - base
+    - small
+    - medium
+    - large
+  default_model: small  # Default Whisper model to use for transcription. Options: tiny, base, small, medium, large.
+
+key_combination:
+  - ctrl
+  - shift
+  - space  # Key combination to toggle recording. Customize as needed to avoid conflicts with other shortcuts.
+
+samplerate: 16000  # Audio sampling rate in Hz. Common values: 16000, 44100, 48000.
+
+channels: 1  # Number of audio channels. 1 for mono, 2 for stereo.
+
+dtype: float32  # Data type for audio samples. Options: float32, int16, etc.
+
+gui_settings:
+  always_on_top: false  # If true, keeps the application window above all others.
+
+Logging:
+  log_level: DEBUG          # Global log level. Options: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+  console_log_level: INFO   # Log level for console output. Helps in controlling verbosity in the terminal.
+  log_to_console: false     # If true, logs will be output to the console in addition to log files.
+  log_dir: logs/push_to_talk_logs  # Directory where log files are stored.
+  log_format: json          # Format of the logs. Options: json (structured logging), plain (simple text).
+  enable_dynamic_log_level: true  # Allows changing the log level at runtime via the GUI.
+
+enable_noise_reduction: true  # Enables noise reduction on recorded audio to improve transcription accuracy.
+
+max_recording_duration: 60  # Maximum duration (in seconds) for each recording session to prevent excessively long recordings.
+
+LogCleanup:
+  cleanup_enabled: true        # If true, enables automatic cleanup of old log files based on the retention policy.
+  max_log_files: 10            # Maximum number of log files to retain when using the 'count' retention strategy.
+  retention_days: 7            # Number of days to retain log files when using the 'time' retention strategy.
+  retention_strategy: time     # Strategy for log retention. Options: 'time' (based on age), 'count' (based on number).
+
+save_transcription: false  # If true, saves transcribed text to files in the specified directory.
+save_audio: false          # If true, saves recorded audio clips to files in the specified directory.
+save_directory: transcriptions  # Directory where transcriptions and audio clips are saved. Ensure this directory exists or the application has permission to create it.
+
+enable_system_monitoring: true  # If true, logs system resource usage (CPU, Memory) periodically for monitoring purposes.
+
+use_fp16: true  # If true, uses 16-bit floating-point precision during transcription to potentially improve performance on compatible GPUs.
+
+documentation_file: README.md  # Path to the user guide or documentation file displayed in the application.
+
+record_audio: true  # Enables or disables audio recording functionality within the application.
+
+key_listener_sleep: 0.1  # Time (in seconds) the key listener thread waits between checks to detect key presses. Lower values make the listener more responsive but consume more CPU.
+
+audio_device_index: 2  # Index of the audio input device to use for recording. Use system tools or scripts to determine the correct index for your preferred microphone.

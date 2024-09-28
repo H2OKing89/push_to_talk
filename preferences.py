@@ -5,9 +5,12 @@ from tkinter import ttk, messagebox
 import logging
 from config import save_config, load_config
 from utils import get_absolute_path, create_tooltip
-from logger import sanitize_message  # Importing sanitize_message
-import threading  # Import threading module
-import sounddevice as sd  # Import sounddevice for audio devices
+from logger import sanitize_message
+import threading
+import sounddevice as sd
+
+# Set up module-specific logger
+logger = logging.getLogger(__name__)
 
 def get_input_devices():
     """Retrieves a list of available audio input devices."""
@@ -23,9 +26,9 @@ class PreferencesWindow:
         self.parent = parent
         self.config = config
         self.on_save_callback = on_save_callback
-        self.set_log_level_callback = set_log_level_callback  # Callback to set log level
-        self.correlation_id = correlation_id  # Store correlation_id
-        self.trace_id = trace_id  # Store trace_id
+        self.set_log_level_callback = set_log_level_callback
+        self.correlation_id = correlation_id
+        self.trace_id = trace_id
         self.window = tk.Toplevel(parent)
         self.window.title("Preferences")
         self.window.geometry("500x600")
@@ -131,7 +134,10 @@ class PreferencesWindow:
         new_level = self.log_level_var.get()
         if new_level:
             self.set_log_level_callback(new_level)
-            logging.info(f"Log level changed to {new_level}", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
+            logger.info(
+                f"Log level changed to {new_level}",
+                extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}
+            )
             messagebox.showinfo("Logging", f"Log level successfully changed to {new_level}.")
 
     def save_preferences(self):
@@ -175,14 +181,18 @@ class PreferencesWindow:
 
         try:
             save_config(self.config)
-            logging.info("Preferences saved successfully.", 
-                         extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
+            logger.info(
+                "Preferences saved successfully.",
+                extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}
+            )
             messagebox.showinfo("Preferences", "Preferences saved successfully.")
             self.on_save_callback()
             self.window.destroy()
         except Exception as e:
             sanitized_error = sanitize_message(str(e))
-            logging.error(f"Failed to save preferences: {sanitized_error}", 
-                          extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}, 
-                          exc_info=True)
+            logger.error(
+                f"Failed to save preferences: {sanitized_error}",
+                extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id},
+                exc_info=True
+            )
             messagebox.showerror("Error", f"Failed to save preferences: {e}")

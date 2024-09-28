@@ -2,13 +2,15 @@
 
 import logging
 import logging.handlers
-import json
 from pythonjsonlogger import jsonlogger
 from utils import get_absolute_path
 import os
 import threading
 from datetime import datetime, timedelta
 import re
+
+# Set up module-specific logger
+logger = logging.getLogger(__name__)
 
 class ContextFilter(logging.Filter):
     """Injects contextual information into logs."""
@@ -23,23 +25,24 @@ class ContextFilter(logging.Filter):
         return True
 
 log_lock = threading.Lock()
+_logger_initialized = False
 
 def sanitize_message(message):
     """Sanitizes sensitive information from log messages."""
-    # Example: Mask email addresses and credit card numbers
-    email_pattern = re.compile(r'[\w\.-]+@[\w\.-]+')
-    cc_pattern = re.compile(r'\b(?:\d[ -]*?){13,16}\b')
-    
-    message = email_pattern.sub('[REDACTED EMAIL]', message)
-    message = cc_pattern.sub('[REDACTED CREDIT CARD]', message)
-    
+    patterns = {
+        'email': r'[\w\.-]+@[\w\.-]+',
+        'credit_card': r'\b(?:\d[ -]*?){13,16}\b',
+        # Add additional patterns as needed
+    }
+    for key, pattern in patterns.items():
+        message = re.sub(pattern, f'[REDACTED {key.upper()}]', message, flags=re.IGNORECASE)
     return message
 
 def cleanup_old_logs(log_dir, config):
     """Cleans up old log files based on retention policies."""
     try:
         if not config.get('LogCleanup', {}).get('cleanup_enabled', True):
-            logging.debug("Log cleanup is disabled via configuration.")
+            logger.debug("Log cleanup is disabled via configuration.")
             return
 
         retention_days = config.get('LogCleanup', {}).get('retention_days', 7)
@@ -50,7 +53,10 @@ def cleanup_old_logs(log_dir, config):
         cutoff_time = now - timedelta(days=retention_days)
 
         # List all log files in the directory
-        log_files = [f for f in os.listdir(log_dir) if os.path.isfile(os.path.join(log_dir, f)) and f.endswith('.log')]
+        log_files = [
+            f for f in os.listdir(log_dir)
+            if os.path.isfile(os.path.join(log_dir, f)) and f.endswith('.log')
+        ]
 
         # Sort log files by modification time (oldest first)
         log_files.sort(key=lambda x: os.path.getmtime(os.path.join(log_dir, x)))
@@ -62,7 +68,7 @@ def cleanup_old_logs(log_dir, config):
                 file_mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
                 if file_mtime < cutoff_time:
                     os.remove(file_path)
-                    logging.info(f"Deleted old log file: {file_path}")
+                    logger.info(f"Deleted old log file: {file_path}")
         # Retention based on max number of log files
         elif retention_strategy == 'count':
             if len(log_files) > max_log_files:
@@ -70,12 +76,16 @@ def cleanup_old_logs(log_dir, config):
                 for log_file in files_to_delete:
                     file_path = os.path.join(log_dir, log_file)
                     os.remove(file_path)
-                    logging.info(f"Deleted log file to maintain max count: {file_path}")
+                    logger.info(f"Deleted log file to maintain max count: {file_path}")
     except Exception as e:
-        logging.error(f"Error during log cleanup: {e}", exc_info=True)
+        logger.error(f"Error during log cleanup: {e}", exc_info=True)
 
 def setup_logging(config, correlation_id, trace_id):
     """Sets up advanced structured logging with context and cleanup."""
+    global _logger_initialized
+    if _logger_initialized:
+        return  # Logging is already configured
+
     with log_lock:
         logger = logging.getLogger()
         logger.setLevel(getattr(logging, config.get('Logging', {}).get('log_level', 'DEBUG').upper(), logging.DEBUG))
@@ -94,7 +104,7 @@ def setup_logging(config, correlation_id, trace_id):
             utc=False
         )
         file_handler.setLevel(getattr(logging, config.get('Logging', {}).get('log_level', 'DEBUG').upper(), logging.DEBUG))
-        
+
         # Formatter
         if config.get('Logging', {}).get('log_format', 'json') == 'json':
             formatter = jsonlogger.JsonFormatter(
@@ -123,17 +133,12 @@ def setup_logging(config, correlation_id, trace_id):
         # Clean up old logs based on retention policy
         cleanup_old_logs(log_dir, config)
 
+        _logger_initialized = True
+
 def set_log_level(new_level):
     """Dynamically sets the log level."""
     logger = logging.getLogger()
     logger.setLevel(getattr(logging, new_level.upper(), logging.DEBUG))
     for handler in logger.handlers:
         handler.setLevel(getattr(logging, new_level.upper(), logging.DEBUG))
-    logging.info(f"Log level dynamically changed to {new_level.upper()}")
-
-def enable_dynamic_logging(config):
-    """Enables dynamic logging level changes via configuration."""
-    if config.get('Logging', {}).get('enable_dynamic_log_level', False):
-        # Implement a mechanism to watch for config changes or provide an endpoint
-        # For simplicity, this can be a placeholder or integrated with a GUI preference
-        pass  # To be implemented based on application architecture
+    logger.info(f"Log level dynamically changed to {new_level.upper()}")
