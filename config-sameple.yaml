@@ -1,40 +1,61 @@
+# Configuration file for the Push-to-Talk Transcription Application
+
+# LogCleanup section controls how log files are managed and cleaned up over time.
 LogCleanup:
-  cleanup_enabled: true
-  max_log_files: 10
-  retention_days: 7
-  retention_strategy: time
+  cleanup_enabled: true        # Enable or disable automatic log cleanup. If true, logs will be cleaned up based on the rules defined below.
+  max_log_files: 10            # Maximum number of log files to keep. When exceeded, the oldest log files will be deleted.
+  retention_days: 7            # Number of days to retain log files. Files older than this will be deleted.
+  retention_strategy: time      # Strategy to manage logs. 'time' means logs will be removed based on age; 'count' would limit the number of files.
+
+# Logging section defines how and where the application logs events and errors.
 Logging:
-  console_log_level: INFO
-  enable_dynamic_log_level: true
-  log_dir: logs/push_to_talk_logs
-  log_format: json
-  log_level: WARNING
-  log_to_console: false
-audio_device_index: 2
-channels: 1
-documentation_file: README.md
-dtype: float32
-enable_noise_reduction: true
-enable_system_monitoring: true
+  console_log_level: INFO        # Log level for console output. Can be DEBUG, INFO, WARNING, ERROR, CRITICAL. Determines verbosity of logs in the console.
+  enable_dynamic_log_level: true # If true, allows changing the log level at runtime without restarting the application.
+  log_dir: logs/push_to_talk_logs  # Directory where log files will be saved. This folder must exist or the application will create it.
+  log_format: json               # Format for log files. Options are 'json' for structured logging or 'plain' for human-readable text.
+  log_level: WARNING              # Global log level for log files. Defines what level of events get logged to file (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+  log_to_console: false           # If true, logs will also be printed to the console, otherwise they will only go to log files.
+
+# Audio settings for the recording system.
+audio_device_index: 2            # Index of the audio input device (e.g., microphone). Change this number to select the desired input device.
+channels: 1                      # Number of audio channels. 1 for mono, 2 for stereo.
+documentation_file: README.md     # Path to the documentation file that can be displayed within the application.
+dtype: float32                   # Data type used for audio processing. Common options are float32 or int16.
+enable_noise_reduction: true      # If true, noise reduction is applied to recorded audio to improve transcription quality.
+enable_system_monitoring: true    # If true, the application will log system performance metrics (e.g., CPU and memory usage) during transcription.
+
+# GUI settings control the appearance and behavior of the graphical user interface.
 gui_settings:
-  always_on_top: false
+  always_on_top: false            # If true, keeps the application window above all other windows.
+
+# Key combination for the push-to-talk feature.
 key_combination:
-- ctrl
-- alt
-- space
-key_listener_sleep: 0.1
-max_recording_duration: 60
+  - ctrl                          # Control key as part of the key combination.
+  - alt                           # Alt key as part of the key combination.
+  - space                         # Space key as part of the key combination.
+
+# Key listener settings.
+key_listener_sleep: 0.1           # Time (in seconds) the key listener thread waits between checks for key presses. Lower values make it more responsive but increase CPU usage.
+
+# Recording settings.
+max_recording_duration: 60        # Maximum duration (in seconds) for each recording session. Prevents recordings from going on indefinitely.
+
+# Whisper model support.
 model_support:
-  available_models:
-  - tiny
-  - base
-  - small
-  - medium
-  - large
-  default_model: small
-record_audio: true
-samplerate: 16000
-save_audio: false
-save_directory: transcriptions
-save_transcription: false
-use_fp16: true
+  available_models:               # List of available transcription models from OpenAI's Whisper.
+    - tiny
+    - base
+    - small
+    - medium
+    - large
+  default_model: small            # Default model used for transcription. Options are 'tiny', 'base', 'small', 'medium', 'large'.
+
+# Recording behavior and settings.
+record_audio: true                # If true, the application will record audio. Set to false to disable audio recording functionality.
+samplerate: 16000                 # Audio sampling rate in Hz. Common values are 16000, 44100, or 48000. This affects the quality and size of the audio.
+save_audio: false                 # If true, saves recorded audio clips to the directory specified below.
+save_directory: transcriptions     # Directory where transcriptions and audio files are saved. Ensure this directory exists or the application can create it.
+save_transcription: false          # If true, saves the transcribed text to files in the specified directory.
+
+# Use_fp16 enables the use of half-precision (16-bit floating-point) for faster processing on supported hardware.
+use_fp16: true                    # If true, uses 16-bit floating point precision during transcription for faster processing, if supported by your hardware.
