@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import logging
 from config import save_config, load_config
-from utils import get_absolute_path, create_tooltip  # Ensure this line is present
+from utils import get_absolute_path, create_tooltip
 
 class PreferencesWindow:
     def __init__(self, parent, config, on_save_callback):
@@ -81,6 +81,19 @@ class PreferencesWindow:
         self.log_level_dropdown.pack(fill='x', padx=10, pady=5)
         create_tooltip(self.log_level_dropdown, "Select the logging level.")
 
+        # Audio Settings Tab
+        audio_frame = ttk.Frame(notebook)
+        notebook.add(audio_frame, text='Audio')
+
+        self.enable_noise_reduction_var = tk.BooleanVar(value=self.config.get('enable_noise_reduction', True))
+        self.enable_noise_reduction_cb = ttk.Checkbutton(
+            audio_frame,
+            text="Enable Noise Reduction",
+            variable=self.enable_noise_reduction_var
+        )
+        self.enable_noise_reduction_cb.pack(anchor='w', padx=10, pady=10)
+        create_tooltip(self.enable_noise_reduction_cb, "Apply noise reduction to audio before transcription.")
+
         # Save and Cancel Buttons
         button_frame = ttk.Frame(self.window)
         button_frame.pack(fill='x', padx=10, pady=10)
@@ -113,11 +126,16 @@ class PreferencesWindow:
             return
 
         # Update GUI settings
+        self.config.setdefault('gui_settings', {})
         self.config['gui_settings']['always_on_top'] = self.always_on_top_var.get()
 
         # Update logging settings
         selected_log_level = self.log_level_var.get()
+        self.config.setdefault('Logging', {})
         self.config['Logging']['log_level'] = selected_log_level
+
+        # Update noise reduction setting
+        self.config['enable_noise_reduction'] = self.enable_noise_reduction_var.get()
 
         try:
             save_config(self.config)

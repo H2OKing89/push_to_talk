@@ -5,18 +5,16 @@ import threading
 import logging
 from preferences import PreferencesWindow
 from utils import get_absolute_path, create_tooltip
-from config import load_config  # Added import for load_config
+from config import load_config
 import pyautogui
 import numpy as np
 from datetime import datetime
 import soundfile as sf
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-
-# Import shared state variables
 from state import lock, should_exit, audio_buffer
 
-from transcription import load_whisper_model  # Added import for load_whisper_model
+from transcription import load_whisper_model
 
 class TranscriptionGUI:
     def __init__(self, root, config, model, stop_recording_callback, correlation_id, on_model_change_callback):
@@ -24,13 +22,13 @@ class TranscriptionGUI:
         self.config = config
         self.model = model
         self.current_model_name = config.get('model_support', {}).get('default_model', 'base')  # Track model name
-        self.stop_recording_callback = stop_recording_callback  # Callback to stop recording
+        self.stop_recording_callback = stop_recording_callback
         self.correlation_id = correlation_id
         self.on_model_change_callback = on_model_change_callback
 
         self.root.title("Push-to-Talk Transcription")
-        self.root.geometry("800x600")  # Adjusted size to be smaller
-        self.root.minsize(700, 500)     # Minimum size for dynamic resizing
+        self.root.geometry("800x600")
+        self.root.minsize(700, 500)
         self.root.attributes("-topmost", self.config.get('gui_settings', {}).get('always_on_top', True))
 
         # Initialize variables
@@ -108,6 +106,7 @@ class TranscriptionGUI:
         # Progress Bar
         self.progress = ttk.Progressbar(self.main_frame, orient=tk.HORIZONTAL, mode='indeterminate')
         self.progress.grid(row=4, column=0, sticky='ew', pady=(0, 10))
+        self.progress.grid_remove()  # Hide initially
 
         # Exit Button
         exit_frame = ttk.Frame(self.main_frame)
@@ -121,11 +120,6 @@ class TranscriptionGUI:
         self.main_frame.rowconfigure(2, weight=1)
         self.main_frame.rowconfigure(3, weight=1)
         self.main_frame.columnconfigure(0, weight=1)
-
-    def create_tooltips(self):
-        """Creates tooltips for GUI elements."""
-        # Example tooltips are already added in create_main_frame()
-        pass
 
     def setup_waveform_plot(self):
         """Sets up the waveform plot using matplotlib."""
@@ -166,14 +160,9 @@ class TranscriptionGUI:
         # Update Model Support if needed
         default_model = self.config.get('model_support', {}).get('default_model', 'base')
         if default_model != self.current_model_name:
-            try:
-                self.model = load_whisper_model(default_model, self.correlation_id)
-                self.current_model_name = default_model  # Update the tracked model name
-                logging.info(f"Switched to model: {default_model}", extra={'correlation_id': self.correlation_id})
-                messagebox.showinfo("Model Change", f"Switched to model: {default_model}")
-            except Exception as e:
-                logging.error(f"Failed to load model '{default_model}': {e}", extra={'correlation_id': self.correlation_id}, exc_info=True)
-                messagebox.showerror("Error", f"Failed to load model '{default_model}': {e}")
+            # Load the new model in a separate thread
+            self.current_model_name = default_model
+            self.load_model_in_thread(default_model)
 
         # Update Instructions label with new key combination
         keys = ' + '.join([key.upper() for key in self.config.get('key_combination', ['ctrl', 'alt', 'space'])])
@@ -182,6 +171,23 @@ class TranscriptionGUI:
         # Update waveform x-axis limit
         self.ax.set_xlim(0, self.config.get('max_recording_duration', 60))
         self.canvas.draw()
+
+    def load_model_in_thread(self, model_name):
+        """Loads the model in a separate thread."""
+        def load_model():
+            try:
+                self.update_status(f"Loading model '{model_name}'...")
+                self.start_progress()
+                model_loaded = load_whisper_model(model_name, self.correlation_id)
+                self.model = model_loaded
+                self.update_status(f"Model '{model_name}' loaded.")
+                self.stop_progress()
+            except Exception as e:
+                logging.error(f"Failed to load model '{model_name}': {e}", extra={'correlation_id': self.correlation_id}, exc_info=True)
+                self.stop_progress()
+                # Handle model load failure as per main.py
+                messagebox.showerror("Model Load Error", f"Failed to load model '{model_name}'. Please check your configuration or try a different model.")
+        threading.Thread(target=load_model, daemon=True).start()
 
     def show_user_guide(self):
         """Displays the user guide."""
@@ -211,6 +217,7 @@ class TranscriptionGUI:
         self.transcription_text.config(state='normal')
         self.transcription_text.insert(tk.END, text + '\n')
         self.transcription_text.config(state='disabled')
+        self.transcription_text.yview(tk.END)  # Scroll to the end
         length = len(self.transcription_text.get("1.0", tk.END).strip())
         self.update_status(f"Transcription length: {length} characters")
 
@@ -220,8 +227,8 @@ class TranscriptionGUI:
 
     def start_progress(self):
         """Starts the progress bar."""
-        self.progress.start()
         self.progress.grid()
+        self.progress.start()
 
     def stop_progress(self):
         """Stops the progress bar."""
@@ -274,4 +281,5 @@ class TranscriptionGUI:
 
         # Schedule the next update
         if not should_exit:
-            self.root.after(self.plot_update_interval, self.update_waveform)
+            self.root.after(self.plot_update_interval, self.update_waveform)  # Corrected line
+

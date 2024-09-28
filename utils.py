@@ -5,7 +5,7 @@ import tkinter as tk
 
 def get_absolute_path(relative_path):
     """Returns the absolute path based on the script's location."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
+    script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
     return os.path.join(script_dir, relative_path)
 
 class CreateToolTip:
@@ -51,6 +51,7 @@ class CreateToolTip:
         self.tw.wm_geometry("+%d+%d" % (x, y))
         label = tk.Label(self.tw, text=self.text, justify='left',
                          background="#ffffe0", relief='solid', borderwidth=1,
+                         wraplength=self.wraplength,
                          font=("tahoma", "8", "normal"))
         label.pack(ipadx=1)
 
