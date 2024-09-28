@@ -23,8 +23,11 @@ openai-whisper>=2023.3.14     # OpenAI's Whisper model for transcription
 # Optional Dependencies
 Pillow>=9.5.0                 # For enhanced tooltip functionality in the GUI
 
-# GPU Acceleration (New in v0.11.0-beta)
+# Noise Reduction
+noisereduce>=1.0.0            # For reducing background noise in audio clips
+
+# PyTorch (for GPU acceleration)
 torch>=2.0.0+cu118            # PyTorch with CUDA support for GPU acceleration
 
-# Noise Reduction (New in v0.11.0-beta)
-noisereduce>=1.0.0            # For reducing background noise in audio clips
+# Additional Dependencies
+python-json-logger>=2.0.7    # Ensure logging is structured and JSON formatted

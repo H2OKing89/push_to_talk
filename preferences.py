@@ -1,15 +1,31 @@
 # preferences.py
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 import logging
 from config import save_config, load_config
 from utils import get_absolute_path, create_tooltip
+from logger import sanitize_message  # Importing sanitize_message
+import threading  # Import threading module
+import sounddevice as sd  # Import sounddevice for audio devices
+
+def get_input_devices():
+    """Retrieves a list of available audio input devices."""
+    devices = sd.query_devices()
+    input_devices = []
+    for idx, device in enumerate(devices):
+        if device['max_input_channels'] > 0:
+            input_devices.append({'name': device['name'], 'index': idx})
+    return input_devices
 
 class PreferencesWindow:
-    def __init__(self, parent, config, on_save_callback):
+    def __init__(self, parent, config, on_save_callback, set_log_level_callback, correlation_id, trace_id):
         self.parent = parent
         self.config = config
         self.on_save_callback = on_save_callback
+        self.set_log_level_callback = set_log_level_callback  # Callback to set log level
+        self.correlation_id = correlation_id  # Store correlation_id
+        self.trace_id = trace_id  # Store trace_id
         self.window = tk.Toplevel(parent)
         self.window.title("Preferences")
         self.window.geometry("500x600")
@@ -81,18 +97,24 @@ class PreferencesWindow:
         self.log_level_dropdown.pack(fill='x', padx=10, pady=5)
         create_tooltip(self.log_level_dropdown, "Select the logging level.")
 
+        # Dynamic Log Level Adjustment Button
+        self.update_log_level_button = ttk.Button(logging_frame, text="Update Log Level", command=self.update_log_level)
+        self.update_log_level_button.pack(pady=5, padx=10, anchor='e')
+        create_tooltip(self.update_log_level_button, "Click to apply the selected log level.")
+
         # Audio Settings Tab
         audio_frame = ttk.Frame(notebook)
         notebook.add(audio_frame, text='Audio')
 
-        self.enable_noise_reduction_var = tk.BooleanVar(value=self.config.get('enable_noise_reduction', True))
-        self.enable_noise_reduction_cb = ttk.Checkbutton(
-            audio_frame,
-            text="Enable Noise Reduction",
-            variable=self.enable_noise_reduction_var
-        )
-        self.enable_noise_reduction_cb.pack(anchor='w', padx=10, pady=10)
-        create_tooltip(self.enable_noise_reduction_cb, "Apply noise reduction to audio before transcription.")
+        ttk.Label(audio_frame, text="Audio Input Device:", font=("Helvetica", 10)).pack(anchor='w', pady=(10, 0), padx=10)
+        self.input_devices = get_input_devices()
+        device_names = [device['name'] for device in self.input_devices]
+        current_device_index = self.config.get('audio_device_index', sd.default.device[0])
+        current_device_name = next((device['name'] for device in self.input_devices if device['index'] == current_device_index), device_names[0])
+        self.device_var = tk.StringVar(value=current_device_name)
+        self.device_dropdown = ttk.Combobox(audio_frame, values=device_names, textvariable=self.device_var, state='readonly')
+        self.device_dropdown.pack(fill='x', padx=10, pady=5)
+        create_tooltip(self.device_dropdown, "Select the audio input device for recording.")
 
         # Save and Cancel Buttons
         button_frame = ttk.Frame(self.window)
@@ -103,6 +125,14 @@ class PreferencesWindow:
 
         self.cancel_button = ttk.Button(button_frame, text="Cancel", command=self.window.destroy)
         self.cancel_button.pack(side='right', padx=5)
+
+    def update_log_level(self):
+        """Updates the log level dynamically."""
+        new_level = self.log_level_var.get()
+        if new_level:
+            self.set_log_level_callback(new_level)
+            logging.info(f"Log level changed to {new_level}", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
+            messagebox.showinfo("Logging", f"Log level successfully changed to {new_level}.")
 
     def save_preferences(self):
         """Saves the preferences to the config file."""
@@ -134,15 +164,25 @@ class PreferencesWindow:
         self.config.setdefault('Logging', {})
         self.config['Logging']['log_level'] = selected_log_level
 
-        # Update noise reduction setting
-        self.config['enable_noise_reduction'] = self.enable_noise_reduction_var.get()
+        # Update audio device setting
+        selected_device_name = self.device_var.get()
+        selected_device = next((device for device in self.input_devices if device['name'] == selected_device_name), None)
+        if selected_device:
+            self.config['audio_device_index'] = selected_device['index']
+        else:
+            messagebox.showerror("Error", "Selected audio device not found.")
+            return
 
         try:
             save_config(self.config)
-            logging.info("Preferences saved successfully.", extra={'correlation_id': self.config.get('correlation_id', 'unknown')})
+            logging.info("Preferences saved successfully.", 
+                         extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
             messagebox.showinfo("Preferences", "Preferences saved successfully.")
             self.on_save_callback()
             self.window.destroy()
         except Exception as e:
-            logging.error(f"Failed to save preferences: {e}", extra={'correlation_id': self.config.get('correlation_id', 'unknown')}, exc_info=True)
+            sanitized_error = sanitize_message(str(e))
+            logging.error(f"Failed to save preferences: {sanitized_error}", 
+                          extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}, 
+                          exc_info=True)
             messagebox.showerror("Error", f"Failed to save preferences: {e}")

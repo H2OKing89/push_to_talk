@@ -8,9 +8,15 @@ LogCleanup:
   retention_strategy: time
 Logging:
   console_log_level: INFO
-  log_dir: logs/push_to_logs
+  enable_correlation_id: true
+  enable_dynamic_log_level: true
+  enable_trace_id: true
+  log_dir: logs/push_to_talk_logs
+  log_format: json
   log_level: DEBUG
   log_to_console: false
+  sanitize_logs: true
+audio_device_index: 2
 channels: 1
 documentation_file: README.md
 dtype: float32
@@ -33,7 +39,7 @@ model_support:
   - small
   - medium
   - large
-  default_model: large
+  default_model: small
 progress_bar_enabled: true
 record_audio: true
 recording_timeout: 60

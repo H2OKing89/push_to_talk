@@ -1,4 +1,5 @@
 # gui.py
+
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import threading
@@ -13,18 +14,21 @@ import soundfile as sf
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from state import lock, should_exit, audio_buffer
-
+import os
 from transcription import load_whisper_model
+from logger import sanitize_message, set_log_level
 
 class TranscriptionGUI:
-    def __init__(self, root, config, model, stop_recording_callback, correlation_id, on_model_change_callback):
+    def __init__(self, root, config, model, stop_recording_callback, correlation_id, trace_id, on_model_change_callback, graceful_shutdown_callback):
         self.root = root
         self.config = config
         self.model = model
-        self.current_model_name = config.get('model_support', {}).get('default_model', 'base')  # Track model name
+        self.current_model_name = config.get('model_support', {}).get('default_model', 'base')
         self.stop_recording_callback = stop_recording_callback
         self.correlation_id = correlation_id
+        self.trace_id = trace_id
         self.on_model_change_callback = on_model_change_callback
+        self.graceful_shutdown_callback = graceful_shutdown_callback
 
         self.root.title("Push-to-Talk Transcription")
         self.root.geometry("800x600")
@@ -139,7 +143,19 @@ class TranscriptionGUI:
 
     def open_preferences(self):
         """Opens the preferences window."""
-        PreferencesWindow(self.root, self.config, self.apply_preferences)
+        PreferencesWindow(
+            self.root, 
+            self.config, 
+            self.apply_preferences, 
+            self.set_log_level,
+            self.correlation_id,
+            self.trace_id
+        )
+
+    def set_log_level(self, new_level):
+        """Sets the log level dynamically."""
+        set_log_level(new_level)
+        logging.info(f"Log level changed to {new_level}", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
 
     def apply_preferences(self):
         """Applies preferences after saving."""
@@ -147,11 +163,13 @@ class TranscriptionGUI:
         try:
             new_config = load_config()
             self.config.update(new_config)
-            logging.info("Preferences updated successfully.", extra={'correlation_id': self.correlation_id})
+            logging.info("Preferences updated successfully.", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
             messagebox.showinfo("Preferences", "Preferences updated successfully.")
         except Exception as e:
-            logging.error(f"Failed to reload configuration: {e}", extra={'correlation_id': self.correlation_id}, exc_info=True)
+            sanitized_error = sanitize_message(str(e))
+            logging.error(f"Failed to reload configuration: {sanitized_error}", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}, exc_info=True)
             messagebox.showerror("Error", f"Failed to reload configuration: {e}")
+            return
 
         # Update GUI Settings
         always_on_top = self.config.get('gui_settings', {}).get('always_on_top', True)
@@ -172,21 +190,53 @@ class TranscriptionGUI:
         self.ax.set_xlim(0, self.config.get('max_recording_duration', 60))
         self.canvas.draw()
 
+        # Restart audio stream with new device
+        self.restart_audio_stream()
+
+    def restart_audio_stream(self):
+        """Restarts the audio input stream with the new device."""
+        from main import restart_audio_stream  # Import function from main
+        restart_audio_stream(self, self.config)
+
     def load_model_in_thread(self, model_name):
         """Loads the model in a separate thread."""
         def load_model():
             try:
-                self.update_status(f"Loading model '{model_name}'...")
-                self.start_progress()
-                model_loaded = load_whisper_model(model_name, self.correlation_id)
+                self.root.after(0, self.update_status, f"Loading model '{model_name}'...")
+                self.root.after(0, self.start_progress)
+                from main import load_model_with_retry  # Import function from main
+                model_loaded = load_model_with_retry(model_name)
                 self.model = model_loaded
-                self.update_status(f"Model '{model_name}' loaded.")
-                self.stop_progress()
+                self.root.after(0, self.update_status, f"Model '{model_name}' loaded.")
+                self.root.after(0, self.stop_progress)
             except Exception as e:
-                logging.error(f"Failed to load model '{model_name}': {e}", extra={'correlation_id': self.correlation_id}, exc_info=True)
-                self.stop_progress()
-                # Handle model load failure as per main.py
-                messagebox.showerror("Model Load Error", f"Failed to load model '{model_name}'. Please check your configuration or try a different model.")
+                sanitized_error = sanitize_message(str(e))
+                logging.error(f"Failed to load model '{model_name}': {sanitized_error}", 
+                              extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}, 
+                              exc_info=True)
+                self.root.after(0, self.stop_progress)
+                # Try to load a smaller model
+                fallback_models = ['base', 'small', 'tiny']
+                if model_name in fallback_models:
+                    fallback_models.remove(model_name)
+                for fallback_model in fallback_models:
+                    try:
+                        self.root.after(0, self.update_status, f"Loading fallback model '{fallback_model}'...")
+                        self.root.after(0, self.start_progress)
+                        from main import load_model_with_retry
+                        model_loaded = load_model_with_retry(fallback_model)
+                        self.model = model_loaded
+                        self.root.after(0, self.update_status, f"Model '{fallback_model}' loaded.")
+                        self.root.after(0, self.stop_progress)
+                        self.root.after(0, tk.messagebox.showinfo, "Model Load", f"Loaded fallback model '{fallback_model}' instead.")
+                        return
+                    except Exception as e2:
+                        sanitized_error2 = sanitize_message(str(e2))
+                        logging.error(f"Failed to load fallback model '{fallback_model}': {sanitized_error2}", 
+                                      extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}, 
+                                      exc_info=True)
+                self.root.after(0, tk.messagebox.showerror, "Model Load Error", f"Failed to load model '{model_name}' and fallback models.")
+                self.graceful_shutdown_callback()  # Call the graceful shutdown callback
         threading.Thread(target=load_model, daemon=True).start()
 
     def show_user_guide(self):
@@ -238,14 +288,12 @@ class TranscriptionGUI:
     def on_exit(self):
         """Handles graceful shutdown."""
         if messagebox.askokcancel("Quit", "Do you want to quit?"):
-            logging.info("Application closed by user.", extra={'correlation_id': self.correlation_id})
-            global should_exit  # Declare as global to modify the global variable
-            should_exit = True
-            self.root.quit()
+            logging.info("Application closed by user.", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
+            self.graceful_shutdown_callback()
 
     def start_timeout_timer(self):
         """Starts a timer that will stop recording after a set duration."""
-        max_duration = self.config.get('max_recording_duration', 60)  # Default to 60 seconds
+        max_duration = self.config.get('max_recording_duration', 60)
         self.timeout_timer = self.root.after(int(max_duration * 1000), self.stop_recording_timeout)
 
     def stop_timeout_timer(self):
@@ -257,9 +305,9 @@ class TranscriptionGUI:
     def stop_recording_timeout(self):
         """Callback function to stop recording when the timer expires."""
         if self.is_recording:
-            logging.info("Max recording duration reached. Stopping recording.", extra={'correlation_id': self.correlation_id})
+            logging.info("Max recording duration reached. Stopping recording.", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
             self.update_status("Idle")
-            self.stop_recording_callback()  # Invoke the callback to stop recording
+            self.stop_recording_callback()
             self.stop_timeout_timer()
 
     def update_waveform(self):
@@ -281,5 +329,4 @@ class TranscriptionGUI:
 
         # Schedule the next update
         if not should_exit:
-            self.root.after(self.plot_update_interval, self.update_waveform)  # Corrected line
-
+            self.root.after(self.plot_update_interval, self.update_waveform)

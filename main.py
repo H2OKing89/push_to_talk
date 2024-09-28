@@ -1,9 +1,10 @@
 # main.py
+
 import tkinter as tk
 import threading
 import logging
 from config import load_config, save_config, ConfigError
-from logger import setup_logging
+from logger import setup_logging, set_log_level
 from transcription import load_whisper_model
 from gui import TranscriptionGUI
 from audio_handler import start_audio_stream, save_audio_clip, AudioProcessingError
@@ -19,9 +20,14 @@ import os
 import sounddevice as sd
 from state import lock, should_exit, audio_buffer, correlation_id
 import noisereduce as nr
-from utils import get_absolute_path, create_tooltip  # Added create_tooltip import
+from utils import get_absolute_path, create_tooltip
 import subprocess  # Added import for subprocess
 import torch  # Import torch for device management
+import uuid    # For generating trace_id
+from logger import sanitize_message  # Import sanitize_message
+
+# Generate a trace_id
+trace_id = str(uuid.uuid4())
 
 # Retry decorator to retry function on failure
 def retry_on_failure(retries=3, delay=1):
@@ -33,8 +39,9 @@ def retry_on_failure(retries=3, delay=1):
                     return func(*args, **kwargs)
                 except Exception as e:
                     last_exception = e
-                    logging.error(f"Retrying due to error: {e}, Attempt {attempt + 1} of {retries}", 
-                                  extra={'correlation_id': correlation_id})
+                    sanitized_error = sanitize_message(str(e))
+                    logging.error(f"Retrying due to error: {sanitized_error}, Attempt {attempt + 1} of {retries}", 
+                                  extra={'correlation_id': correlation_id, 'trace_id': trace_id})
                     time.sleep(delay)
             raise last_exception
         return wrapper
@@ -48,7 +55,8 @@ def load_model_with_retry(model_name):
 # Error handling
 def handle_unexpected_error(type, value, traceback_obj):
     """Handles unexpected errors by logging them and generating a crash report."""
-    logging.critical(f"Unexpected error: {value}", exc_info=(type, value, traceback_obj), extra={'correlation_id': correlation_id})
+    sanitized_value = sanitize_message(str(value))
+    logging.critical(f"Unexpected error: {sanitized_value}", exc_info=(type, value, traceback_obj), extra={'correlation_id': correlation_id, 'trace_id': trace_id})
     # Generate crash report
     crash_report = f"Exception Type: {type}\nException Value: {value}\n"
     import traceback
@@ -75,7 +83,8 @@ def handle_unexpected_error(type, value, traceback_obj):
             else:
                 subprocess.call(('xdg-open', crash_report_file))
         except Exception as e:
-            logging.error(f"Failed to open crash report: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
+            sanitized_error = sanitize_message(str(e))
+            logging.error(f"Failed to open crash report: {sanitized_error}", extra={'correlation_id': correlation_id, 'trace_id': trace_id}, exc_info=True)
 
 # Hook into the system's exception handler
 sys.excepthook = handle_unexpected_error
@@ -90,9 +99,10 @@ def check_dependencies():
         default_input = sd.default.device[0]
         if default_input is None:
             raise AudioProcessingError("No default audio input device set.")
-        logging.info("Audio input device is available.", extra={'correlation_id': correlation_id})
+        logging.info("Audio input device is available.", extra={'correlation_id': correlation_id, 'trace_id': trace_id})
     except Exception as e:
-        logging.error(f"Dependency check failed: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
+        sanitized_error = sanitize_message(str(e))
+        logging.error(f"Dependency check failed: {sanitized_error}", extra={'correlation_id': correlation_id, 'trace_id': trace_id}, exc_info=True)
         tk.messagebox.showerror("Dependency Error", f"Audio input device not available: {e}")
         graceful_shutdown()
 
@@ -102,16 +112,17 @@ def audio_callback(indata, frames, time_info, status, gui):
         if gui.is_recording:
             with lock:
                 audio_buffer.append(indata.copy())
-            logging.debug(f"Captured {len(indata)} frames of audio.", extra={'correlation_id': correlation_id})
+            logging.debug(f"Captured {len(indata)} frames of audio.", extra={'correlation_id': correlation_id, 'trace_id': trace_id})
     except Exception as e:
-        logging.error(f"Error in audio callback: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
+        sanitized_error = sanitize_message(str(e))
+        logging.error(f"Error in audio callback: {sanitized_error}", extra={'correlation_id': correlation_id, 'trace_id': trace_id}, exc_info=True)
         gui.update_status("Error")
         tk.messagebox.showerror("Error", f"Error during audio capture: {e}")
 
 def start_recording(gui, config):
     """Starts recording audio."""
     if not config.get('record_audio', True):
-        logging.info("Audio recording is disabled via configuration.", extra={'correlation_id': correlation_id})
+        logging.info("Audio recording is disabled via configuration.", extra={'correlation_id': correlation_id, 'trace_id': trace_id})
         return
     play_start_sound()
     with lock:
@@ -119,7 +130,7 @@ def start_recording(gui, config):
             gui.is_recording = True
             audio_buffer.clear()
             gui.update_status("Recording")
-            logging.info("Recording started.", extra={'correlation_id': correlation_id})
+            logging.info("Recording started.", extra={'correlation_id': correlation_id, 'trace_id': trace_id})
             gui.start_timeout_timer()
 
 def stop_recording(gui):
@@ -132,40 +143,41 @@ def stop_recording(gui):
             gui.is_recording = False
             gui.update_status("Transcribing")
             gui.stop_timeout_timer()
-            logging.info("Recording stopped. Starting transcription.", extra={'correlation_id': correlation_id})
+            logging.info("Recording stopped. Starting transcription.", extra={'correlation_id': correlation_id, 'trace_id': trace_id})
             if audio_buffer:
                 audio_data = np.concatenate(audio_buffer, axis=0).flatten()
                 transcription_thread = threading.Thread(target=transcribe_audio, args=(audio_data, gui), daemon=True)
                 transcription_thread.start()
             else:
-                logging.warning("No audio data captured.", extra={'correlation_id': correlation_id})
+                logging.warning("No audio data captured.", extra={'correlation_id': correlation_id, 'trace_id': trace_id})
                 gui.update_status("Idle")
             audio_buffer.clear()
 
 def transcribe_audio(audio_data, gui):
     """Transcribes the audio data and updates the GUI."""
     try:
-        gui.start_progress()
+        # Schedule GUI updates in the main thread
+        gui.root.after(0, gui.start_progress)
         if audio_data.dtype != np.float32:
             audio_data = audio_data.astype(np.float32)
         # Apply noise reduction
         noise_reduction_enabled = config.get('enable_noise_reduction', True)
         if noise_reduction_enabled:
-            logging.info("Applying noise reduction...", extra={'correlation_id': correlation_id})
+            logging.info("Applying noise reduction...", extra={'correlation_id': correlation_id, 'trace_id': trace_id})
             # Estimate noise from the first 0.5 seconds
             noise_sample = audio_data[:int(0.5 * config.get('samplerate', 16000))]
             audio_data = nr.reduce_noise(y=audio_data, sr=config.get('samplerate', 16000), y_noise=noise_sample)
-        
+
         # Move audio data to the same device as the model
         model_device = gui.model.device
         audio_tensor = torch.from_numpy(audio_data).to(model_device)
-        
+
         # Perform transcription
         result = gui.model.transcribe(audio_tensor, fp16=config.get('use_fp16', False))
         transcription = result['text'].strip()
-        logging.info(f"Transcription: {transcription}", extra={'correlation_id': correlation_id})
+        logging.info(f"Transcription: {transcription}", extra={'correlation_id': correlation_id, 'trace_id': trace_id})
         if transcription:
-            gui.append_transcription(transcription)
+            gui.root.after(0, lambda: gui.append_transcription(transcription))
             if config.get('save_transcription', False):
                 save_transcription(transcription, config)
             pyautogui.write(transcription + ' ')
@@ -173,13 +185,14 @@ def transcribe_audio(audio_data, gui):
             save_audio_clip(audio_data, config.get('save_directory', 'transcriptions'), config.get('samplerate', 16000), correlation_id)
         if config.get('enable_system_monitoring', True):
             log_system_usage()
-        gui.update_status("Idle")
+        gui.root.after(0, lambda: gui.update_status("Idle"))
     except Exception as e:
-        logging.error(f"Error during transcription: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
-        gui.update_status("Error")
+        sanitized_error = sanitize_message(str(e))
+        logging.error(f"Error during transcription: {sanitized_error}", extra={'correlation_id': correlation_id, 'trace_id': trace_id}, exc_info=True)
+        gui.root.after(0, lambda: gui.update_status("Error"))
         tk.messagebox.showerror("Error", f"Transcription failed: {e}")
     finally:
-        gui.stop_progress()
+        gui.root.after(0, gui.stop_progress)
 
 def save_transcription(transcription, config):
     """Saves the transcription to a file with rollback on failure."""
@@ -192,9 +205,10 @@ def save_transcription(transcription, config):
         with open(temp_transcription_file, 'w', encoding='utf-8') as f:
             f.write(transcription)
         os.replace(temp_transcription_file, transcription_file)
-        logging.info(f"Transcription saved to {transcription_file}", extra={'correlation_id': correlation_id})
+        logging.info(f"Transcription saved to {transcription_file}", extra={'correlation_id': correlation_id, 'trace_id': trace_id})
     except Exception as e:
-        logging.error(f"Failed to save transcription: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
+        sanitized_error = sanitize_message(str(e))
+        logging.error(f"Failed to save transcription: {sanitized_error}", extra={'correlation_id': correlation_id, 'trace_id': trace_id}, exc_info=True)
         # Remove temporary file if it exists
         if os.path.exists(temp_transcription_file):
             os.remove(temp_transcription_file)
@@ -219,24 +233,25 @@ def log_system_usage():
     process = psutil.Process(os.getpid())
     memory_info = process.memory_info()
     cpu_usage = process.cpu_percent(interval=1)
-    logging.info(f"Memory usage: {memory_info.rss / (1024 * 1024):.2f} MB, CPU usage: {cpu_usage:.2f}%", extra={'correlation_id': correlation_id})
+    logging.info(f"Memory usage: {memory_info.rss / (1024 * 1024):.2f} MB, CPU usage: {cpu_usage:.2f}%", extra={'correlation_id': correlation_id, 'trace_id': trace_id})
 
 def key_listener(gui, config):
     """Listens for the key combination to toggle recording."""
     keys = config.get('key_combination', ['ctrl', 'alt', 'space'])
-    logging.info(f"Key listener started. Waiting for {' + '.join(keys)} to toggle recording.", extra={'correlation_id': correlation_id})
+    logging.info(f"Key listener started. Waiting for {' + '.join(keys)} to toggle recording.", extra={'correlation_id': correlation_id, 'trace_id': trace_id})
     while not should_exit:
         try:
             if all(keyboard.is_pressed(key) for key in keys):
                 if not gui.is_recording:
-                    start_recording(gui, config)
+                    gui.root.after(0, lambda: start_recording(gui, config))
                 else:
-                    stop_recording(gui)
+                    gui.root.after(0, lambda: stop_recording(gui))
                 while all(keyboard.is_pressed(key) for key in keys):
                     time.sleep(config.get('key_listener_sleep', 0.1))
             time.sleep(config.get('key_listener_sleep', 0.1))
         except Exception as e:
-            logging.error(f"Error in key listener: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
+            sanitized_error = sanitize_message(str(e))
+            logging.error(f"Error in key listener: {sanitized_error}", extra={'correlation_id': correlation_id, 'trace_id': trace_id}, exc_info=True)
             gui.update_status("Error")
             tk.messagebox.showerror("Error", f"Key listener failed: {e}")
 
@@ -247,41 +262,65 @@ def graceful_shutdown():
     if 'stream' in globals():
         stream.stop()
         stream.close()
-    logging.info("Application has exited gracefully.", extra={'correlation_id': correlation_id})
+    logging.info("Application has exited gracefully.", extra={'correlation_id': correlation_id, 'trace_id': trace_id})
     sys.exit(0)
 
 def load_model_in_thread(model_name, gui):
     """Loads the model in a separate thread."""
     def load_model():
         try:
-            gui.update_status(f"Loading model '{model_name}'...")
-            gui.start_progress()
+            gui.root.after(0, lambda: gui.update_status(f"Loading model '{model_name}'..."))
+            gui.root.after(0, gui.start_progress)
             model_loaded = load_model_with_retry(model_name)
             gui.model = model_loaded
-            gui.update_status(f"Model '{model_name}' loaded.")
-            gui.stop_progress()
+            gui.root.after(0, lambda: gui.update_status(f"Model '{model_name}' loaded."))
+            gui.root.after(0, gui.stop_progress)
         except Exception as e:
-            logging.error(f"Failed to load model '{model_name}': {e}", extra={'correlation_id': correlation_id}, exc_info=True)
-            gui.stop_progress()
+            sanitized_error = sanitize_message(str(e))
+            logging.error(f"Failed to load model '{model_name}': {sanitized_error}", extra={'correlation_id': correlation_id, 'trace_id': trace_id}, exc_info=True)
+            gui.root.after(0, gui.stop_progress)
             # Try to load a smaller model
             fallback_models = ['base', 'small', 'tiny']
             if model_name in fallback_models:
                 fallback_models.remove(model_name)
             for fallback_model in fallback_models:
                 try:
-                    gui.update_status(f"Loading fallback model '{fallback_model}'...")
-                    gui.start_progress()
+                    gui.root.after(0, lambda: gui.update_status(f"Loading fallback model '{fallback_model}'..."))
+                    gui.root.after(0, gui.start_progress)
                     model_loaded = load_model_with_retry(fallback_model)
                     gui.model = model_loaded
-                    gui.update_status(f"Model '{fallback_model}' loaded.")
-                    gui.stop_progress()
-                    tk.messagebox.showinfo("Model Load", f"Loaded fallback model '{fallback_model}' instead.")
+                    gui.root.after(0, lambda: gui.update_status(f"Model '{fallback_model}' loaded."))
+                    gui.root.after(0, gui.stop_progress)
+                    gui.root.after(0, lambda: tk.messagebox.showinfo("Model Load", f"Loaded fallback model '{fallback_model}' instead."))
                     return
                 except Exception as e2:
-                    logging.error(f"Failed to load fallback model '{fallback_model}': {e2}", extra={'correlation_id': correlation_id}, exc_info=True)
-            tk.messagebox.showerror("Model Load Error", f"Failed to load model '{model_name}' and fallback models.")
+                    sanitized_error2 = sanitize_message(str(e2))
+                    logging.error(f"Failed to load fallback model '{fallback_model}': {sanitized_error2}", extra={'correlation_id': correlation_id, 'trace_id': trace_id}, exc_info=True)
+            gui.root.after(0, lambda: tk.messagebox.showerror("Model Load Error", f"Failed to load model '{model_name}' and fallback models."))
             graceful_shutdown()
     threading.Thread(target=load_model, daemon=True).start()
+
+def restart_audio_stream(gui, config):
+    """Restarts the audio input stream with the new device."""
+    global stream
+    if 'stream' in globals():
+        stream.stop()
+        stream.close()
+    try:
+        device_index = config.get('audio_device_index', sd.default.device[0])
+        stream = start_audio_stream(
+            callback=lambda indata, frames, time_info, status: audio_callback(indata, frames, time_info, status, gui),
+            samplerate=config.get('samplerate', 16000),
+            channels=config.get('channels', 1),
+            dtype=config.get('dtype', 'float32'),
+            device=device_index
+        )
+        logging.info("Audio stream restarted with new device.", extra={'correlation_id': correlation_id, 'trace_id': trace_id})
+    except AudioProcessingError as e:
+        sanitized_error = sanitize_message(str(e))
+        logging.error(f"Failed to restart audio input stream: {sanitized_error}", extra={'correlation_id': correlation_id, 'trace_id': trace_id}, exc_info=True)
+        tk.messagebox.showerror("Error", f"Failed to restart audio input stream: {e}")
+        graceful_shutdown()
 
 # Main execution
 if __name__ == "__main__":
@@ -290,12 +329,21 @@ if __name__ == "__main__":
     except ConfigError as e:
         tk.messagebox.showerror("Configuration Error", f"Failed to load configuration: {e}")
         sys.exit(1)
-    setup_logging(config, correlation_id)
+    setup_logging(config, correlation_id, trace_id)
     sys.excepthook = handle_unexpected_error
 
     # Initialize the GUI first
     root = tk.Tk()
-    gui = TranscriptionGUI(root, config, None, lambda: stop_recording(gui), correlation_id, None)
+    gui = TranscriptionGUI(
+        root, 
+        config, 
+        None, 
+        lambda: stop_recording(gui), 
+        correlation_id, 
+        trace_id, 
+        None, 
+        graceful_shutdown  # Pass the graceful_shutdown function as a callback
+    )
 
     # Start loading the model in a separate thread
     default_model_name = config.get('model_support', {}).get('default_model', 'base')
@@ -305,14 +353,17 @@ if __name__ == "__main__":
     check_dependencies()
 
     try:
+        device_index = config.get('audio_device_index', sd.default.device[0])
         stream = start_audio_stream(
             callback=lambda indata, frames, time_info, status: audio_callback(indata, frames, time_info, status, gui),
             samplerate=config.get('samplerate', 16000),
             channels=config.get('channels', 1),
-            dtype=config.get('dtype', 'float32')
+            dtype=config.get('dtype', 'float32'),
+            device=device_index
         )
     except AudioProcessingError as e:
-        logging.error(f"Failed to start audio input stream: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
+        sanitized_error = sanitize_message(str(e))
+        logging.error(f"Failed to start audio input stream: {sanitized_error}", extra={'correlation_id': correlation_id, 'trace_id': trace_id}, exc_info=True)
         tk.messagebox.showerror("Error", f"Failed to start audio input stream: {e}")
         graceful_shutdown()
 

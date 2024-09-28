@@ -1,41 +1,39 @@
 # audio_handler.py
+
 import sounddevice as sd
-import numpy as np
 import logging
-import soundfile as sf
+from state import correlation_id
+from config import ConfigError
+from transcription import check_model_availability
 import os
 from datetime import datetime
-from state import correlation_id
+import soundfile as sf
+from logger import sanitize_message
 
 class AudioProcessingError(Exception):
+    """Custom exception for audio processing errors."""
     pass
 
-def start_audio_stream(callback, samplerate, channels, dtype):
+def start_audio_stream(callback, samplerate, channels, dtype, device=None):
     """Starts the audio input stream."""
     try:
-        stream = sd.InputStream(
-            callback=callback,
-            samplerate=samplerate,
-            channels=channels,
-            dtype=dtype
-        )
+        stream = sd.InputStream(callback=callback, samplerate=samplerate, channels=channels, dtype=dtype, device=device)
         stream.start()
-        logging.info("Audio input stream started.", extra={'correlation_id': correlation_id})
+        logging.info("Audio stream started successfully.", extra={'correlation_id': correlation_id})
         return stream
     except Exception as e:
-        logging.error(f"Failed to start audio input stream: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
-        raise AudioProcessingError(f"Error starting audio stream: {e}")
+        sanitized_error = sanitize_message(str(e))
+        logging.error(f"Failed to start audio stream: {sanitized_error}", extra={'correlation_id': correlation_id}, exc_info=True)
+        raise AudioProcessingError(f"Failed to start audio stream: {e}")
 
-def save_audio_clip(audio_data, save_dir, samplerate, correlation_id):
-    """Saves the recorded audio clip to a file."""
+def save_audio_clip(audio_data, save_directory, samplerate, correlation_id):
+    """Saves the audio clip to a file."""
     try:
         timestamp = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
-        audio_file = os.path.join(save_dir, f"audio_{timestamp}.wav")
-        # Normalize audio to prevent clipping
-        audio_normalized = audio_data / np.max(np.abs(audio_data)) if np.max(np.abs(audio_data)) != 0 else audio_data
-        os.makedirs(save_dir, exist_ok=True)
-        sf.write(audio_file, audio_normalized, samplerate)
+        os.makedirs(save_directory, exist_ok=True)
+        audio_file = os.path.join(save_directory, f"audio_{timestamp}.wav")
+        sf.write(audio_file, audio_data, samplerate)
         logging.info(f"Audio clip saved to {audio_file}", extra={'correlation_id': correlation_id})
     except Exception as e:
-        logging.error(f"Failed to save audio clip: {e}", extra={'correlation_id': correlation_id}, exc_info=True)
-        raise AudioProcessingError(f"Error saving audio clip: {e}")
+        sanitized_error = sanitize_message(str(e))
+        logging.error(f"Failed to save audio clip: {sanitized_error}", extra={'correlation_id': correlation_id}, exc_info=True)
