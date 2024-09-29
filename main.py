@@ -305,8 +305,16 @@ def graceful_shutdown():
     global should_exit
     should_exit = True
     if 'stream' in globals():
-        stream.stop()
-        stream.close()
+        try:
+            stream.stop()
+            stream.close()
+        except Exception as e:
+            sanitized_error = sanitize_message(str(e))
+            logger.error(
+                f"Error closing audio stream: {sanitized_error}",
+                extra={'correlation_id': correlation_id, 'trace_id': trace_id},
+                exc_info=True
+            )
     logger.info("Application has exited gracefully.", extra={'correlation_id': correlation_id, 'trace_id': trace_id})
     sys.exit(0)
 
@@ -357,8 +365,16 @@ def restart_audio_stream(gui, config):
     """Restarts the audio input stream with the new device."""
     global stream
     if 'stream' in globals():
-        stream.stop()
-        stream.close()
+        try:
+            stream.stop()
+            stream.close()
+        except Exception as e:
+            sanitized_error = sanitize_message(str(e))
+            logger.error(
+                f"Error stopping existing audio stream: {sanitized_error}",
+                extra={'correlation_id': correlation_id, 'trace_id': trace_id},
+                exc_info=True
+            )
     try:
         device_index = config.get('audio_device_index', sd.default.device[0])
         stream = start_audio_stream(
@@ -437,3 +453,4 @@ if __name__ == "__main__":
 
     gui.exit_button.config(command=graceful_shutdown)
     root.mainloop()
+

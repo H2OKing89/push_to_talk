@@ -6,7 +6,7 @@ import threading
 import logging
 from preferences import PreferencesWindow
 from utils import get_absolute_path, create_tooltip
-from config import load_config
+from config import load_config, ConfigError  # Added ConfigError import
 import pyautogui
 import numpy as np
 from datetime import datetime
@@ -84,6 +84,11 @@ class TranscriptionGUI:
         self.status_label = ttk.Label(status_frame, text="Idle", font=("Helvetica", 12))
         self.status_label.grid(row=0, column=1, sticky='w', padx=(10, 0))
         create_tooltip(self.status_label, "Current status of the application.")
+
+        # Recording Indicator
+        self.record_indicator = tk.Canvas(status_frame, width=20, height=20, highlightthickness=0)
+        self.record_indicator.grid(row=0, column=2, sticky='w', padx=(10, 0))
+        self.record_indicator.create_oval(5, 5, 15, 15, fill='grey')  # Initial state: not recording
 
         # Instructions Frame
         instructions_frame = ttk.Frame(self.main_frame)
@@ -176,7 +181,7 @@ class TranscriptionGUI:
             self.config.update(new_config)
             logger.info("Preferences updated successfully.", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
             messagebox.showinfo("Preferences", "Preferences updated successfully.")
-        except Exception as e:
+        except ConfigError as e:
             sanitized_error = sanitize_message(str(e))
             logger.error(
                 f"Failed to reload configuration: {sanitized_error}",
@@ -217,12 +222,12 @@ class TranscriptionGUI:
         """Loads the model in a separate thread."""
         def load_model():
             try:
-                self.root.after(0, self.update_status, f"Loading model '{model_name}'...")
+                self.root.after(0, lambda: self.update_status(f"Loading model '{model_name}'..."))
                 self.root.after(0, self.start_progress)
                 from main import load_model_with_retry  # Import function from main
                 model_loaded = load_model_with_retry(model_name)
                 self.model = model_loaded
-                self.root.after(0, self.update_status, f"Model '{model_name}' loaded.")
+                self.root.after(0, lambda: self.update_status(f"Model '{model_name}' loaded."))
                 self.root.after(0, self.stop_progress)
             except Exception as e:
                 sanitized_error = sanitize_message(str(e))
@@ -238,14 +243,14 @@ class TranscriptionGUI:
                     fallback_models.remove(model_name)
                 for fallback_model in fallback_models:
                     try:
-                        self.root.after(0, self.update_status, f"Loading fallback model '{fallback_model}'...")
+                        self.root.after(0, lambda: self.update_status(f"Loading fallback model '{fallback_model}'..."))
                         self.root.after(0, self.start_progress)
                         from main import load_model_with_retry
                         model_loaded = load_model_with_retry(fallback_model)
                         self.model = model_loaded
-                        self.root.after(0, self.update_status, f"Model '{fallback_model}' loaded.")
+                        self.root.after(0, lambda: self.update_status(f"Model '{fallback_model}' loaded."))
                         self.root.after(0, self.stop_progress)
-                        self.root.after(0, tk.messagebox.showinfo, "Model Load", f"Loaded fallback model '{fallback_model}' instead.")
+                        self.root.after(0, lambda: tk.messagebox.showinfo("Model Load", f"Loaded fallback model '{fallback_model}' instead."))
                         return
                     except Exception as e2:
                         sanitized_error2 = sanitize_message(str(e2))
@@ -254,7 +259,7 @@ class TranscriptionGUI:
                             extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id},
                             exc_info=True
                         )
-                self.root.after(0, tk.messagebox.showerror, "Model Load Error", f"Failed to load model '{model_name}' and fallback models.")
+                self.root.after(0, lambda: tk.messagebox.showerror("Model Load Error", f"Failed to load model '{model_name}' and fallback models."))
                 self.graceful_shutdown_callback()  # Call the graceful shutdown callback
         threading.Thread(target=load_model, daemon=True).start()
 
@@ -270,6 +275,8 @@ class TranscriptionGUI:
         guide_window.title("User Guide")
         guide_window.geometry("800x600")
         guide_window.resizable(True, True)
+        guide_window.transient(self.root)  # Ensure it appears above the main window
+        guide_window.grab_set()
 
         guide_text = scrolledtext.ScrolledText(guide_window, wrap='word', state='normal')
         guide_text.pack(expand=True, fill='both')
@@ -277,8 +284,14 @@ class TranscriptionGUI:
         guide_text.config(state='disabled')
 
     def update_status(self, status):
-        """Updates the status label."""
+        """Updates the status label and visual indicators."""
         self.status_label.config(text=f"Status: {status}")
+        if "Recording" in status:
+            self.status_label.config(foreground='red')
+            self.record_indicator.itemconfig(1, fill='red')  # Active recording
+        else:
+            self.status_label.config(foreground='black')
+            self.record_indicator.itemconfig(1, fill='grey')  # Inactive
         self.root.update_idletasks()
 
     def append_transcription(self, text):
@@ -349,3 +362,27 @@ class TranscriptionGUI:
         # Schedule the next update
         if not should_exit:
             self.root.after(self.plot_update_interval, self.update_waveform)
+
+    # Additional Methods for Visual Indicators
+    def set_recording_indicator(self, is_recording):
+        """Sets visual indicators based on recording state."""
+        if is_recording:
+            self.status_label.config(foreground='red')
+            self.status_label.config(text="Status: Recording")
+            self.record_indicator.itemconfig(1, fill='red')  # Active recording
+        else:
+            self.status_label.config(foreground='black')
+            self.status_label.config(text="Status: Idle")
+            self.record_indicator.itemconfig(1, fill='grey')  # Inactive
+
+    # Override update_status to include visual indicators
+    def update_status(self, status):
+        """Updates the status label and visual indicators."""
+        self.status_label.config(text=f"Status: {status}")
+        if "Recording" in status:
+            self.status_label.config(foreground='red')
+            self.record_indicator.itemconfig(1, fill='red')  # Active recording
+        else:
+            self.status_label.config(foreground='black')
+            self.record_indicator.itemconfig(1, fill='grey')  # Inactive
+        self.root.update_idletasks()

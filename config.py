@@ -6,6 +6,7 @@ import logging
 from utils import get_absolute_path
 from state import correlation_id
 from logger import sanitize_message
+import sounddevice as sd  # Added import
 
 # Set up module-specific logger
 logger = logging.getLogger(__name__)
@@ -58,6 +59,33 @@ def load_config():
                 extra={'correlation_id': correlation_id}
             )
             raise ConfigError(f"Missing required configuration field: {field}")
+
+    # Validate audio_device_index if present
+    if 'audio_device_index' in config:
+        if not isinstance(config['audio_device_index'], int):
+            logger.warning(
+                "Invalid type for 'audio_device_index'. It should be an integer. Falling back to default device.",
+                extra={'correlation_id': correlation_id}
+            )
+            config['audio_device_index'] = sd.default.device[0]
+        else:
+            # Check if the device index exists
+            try:
+                devices = sd.query_devices()
+                if not any(device['index'] == config['audio_device_index'] for device in devices):
+                    logger.warning(
+                        f"Configured audio_device_index {config['audio_device_index']} not found. Falling back to default device.",
+                        extra={'correlation_id': correlation_id}
+                    )
+                    config['audio_device_index'] = sd.default.device[0]
+            except Exception as e:
+                sanitized_error = sanitize_message(str(e))
+                logger.error(
+                    f"Error querying audio devices: {sanitized_error}",
+                    extra={'correlation_id': correlation_id},
+                    exc_info=True
+                )
+                config['audio_device_index'] = sd.default.device[0]
 
     # Additional validations can be added here
 

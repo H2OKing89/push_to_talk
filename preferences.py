@@ -3,7 +3,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import logging
-from config import save_config, load_config
+from config import save_config, load_config, ConfigError
 from utils import get_absolute_path, create_tooltip
 from logger import sanitize_message
 import threading
@@ -14,12 +14,19 @@ logger = logging.getLogger(__name__)
 
 def get_input_devices():
     """Retrieves a list of available audio input devices."""
-    devices = sd.query_devices()
-    input_devices = []
-    for idx, device in enumerate(devices):
-        if device['max_input_channels'] > 0:
-            input_devices.append({'name': device['name'], 'index': idx})
-    return input_devices
+    try:
+        devices = sd.query_devices()
+        input_devices = []
+        for idx, device in enumerate(devices):
+            if device['max_input_channels'] > 0:
+                input_devices.append({'name': device['name'], 'index': idx})
+        return input_devices
+    except Exception as e:
+        logger.error(
+            f"Failed to retrieve audio devices: {sanitize_message(str(e))}",
+            exc_info=True
+        )
+        return []
 
 class PreferencesWindow:
     def __init__(self, parent, config, on_save_callback, set_log_level_callback, correlation_id, trace_id):
@@ -33,7 +40,15 @@ class PreferencesWindow:
         self.window.title("Preferences")
         self.window.geometry("500x600")
         self.window.resizable(False, False)
+        self.window.protocol("WM_DELETE_WINDOW", self.on_close)  # Handle window close event
         self.create_widgets()
+        self.ensure_on_top()
+
+    def ensure_on_top(self):
+        """Ensures the preferences window is above the main window."""
+        self.window.transient(self.parent)
+        self.window.grab_set()
+        self.parent.wait_window(self.window)
 
     def create_widgets(self):
         """Creates widgets for the preferences window."""
@@ -113,7 +128,11 @@ class PreferencesWindow:
         self.input_devices = get_input_devices()
         device_names = [device['name'] for device in self.input_devices]
         current_device_index = self.config.get('audio_device_index', sd.default.device[0])
-        current_device_name = next((device['name'] for device in self.input_devices if device['index'] == current_device_index), device_names[0])
+        current_device = next((device for device in self.input_devices if device['index'] == current_device_index), None)
+        if current_device:
+            current_device_name = current_device['name']
+        else:
+            current_device_name = device_names[0] if device_names else "Default Device"
         self.device_var = tk.StringVar(value=current_device_name)
         self.device_dropdown = ttk.Combobox(audio_frame, values=device_names, textvariable=self.device_var, state='readonly')
         self.device_dropdown.pack(fill='x', padx=10, pady=5)
@@ -126,7 +145,7 @@ class PreferencesWindow:
         self.save_button = ttk.Button(button_frame, text="Save", command=self.save_preferences)
         self.save_button.pack(side='right', padx=5)
 
-        self.cancel_button = ttk.Button(button_frame, text="Cancel", command=self.window.destroy)
+        self.cancel_button = ttk.Button(button_frame, text="Cancel", command=self.on_close)
         self.cancel_button.pack(side='right', padx=5)
 
     def update_log_level(self):
@@ -156,9 +175,11 @@ class PreferencesWindow:
         # Update key listener sleep
         try:
             sleep_time = float(self.key_listener_sleep_var.get())
+            if sleep_time <= 0:
+                raise ValueError("Sleep time must be positive.")
             self.config['key_listener_sleep'] = sleep_time
         except ValueError:
-            messagebox.showerror("Error", "Key Listener Sleep must be a number.")
+            messagebox.showerror("Error", "Key Listener Sleep must be a positive number.")
             return
 
         # Update GUI settings
@@ -187,8 +208,8 @@ class PreferencesWindow:
             )
             messagebox.showinfo("Preferences", "Preferences saved successfully.")
             self.on_save_callback()
-            self.window.destroy()
-        except Exception as e:
+            self.on_close()
+        except ConfigError as e:
             sanitized_error = sanitize_message(str(e))
             logger.error(
                 f"Failed to save preferences: {sanitized_error}",
@@ -196,3 +217,8 @@ class PreferencesWindow:
                 exc_info=True
             )
             messagebox.showerror("Error", f"Failed to save preferences: {e}")
+
+    def on_close(self):
+        """Handles the window close event."""
+        self.window.grab_release()
+        self.window.destroy()
