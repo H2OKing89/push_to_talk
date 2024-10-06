@@ -1,13 +1,25 @@
 
 
-my_application/
+## Directory Structure
+
+```plaintext
+push_to_talk/
+├── app_logging
+│   ├── __init__.py
+│   ├── cleanup.py
+│   ├── custom_handlers.py
+│   ├── filters.py
+│   ├── formatters.py
+│   ├── setup.py
+│   └── utils.py
 ├── audio
 │   ├── __init__.py
 │   ├── audio_devices.py
 │   ├── error.py
 │   ├── notifications.py
 │   ├── saving.py
-│   └── streaming.py
+│   ├── streaming.py
+│   └── transcription_saving.py
 ├── config
 │   ├── __init__.py
 │   ├── base.py
@@ -20,8 +32,7 @@ my_application/
 │   ├── model_support_config.py
 │   └── schema.py
 ├── docs
-│   ├── Structure example.md
-│   └── requirements.txt
+│   └── Structure example.md
 ├── gui
 │   ├── __init__.py
 │   ├── audio_device_preview.py
@@ -29,15 +40,8 @@ my_application/
 │   ├── log_level_updater.py
 │   ├── main_gui.py
 │   ├── notifications.py
-│   └── preferences_window.py
-├── logging
-│   ├── __init__.py
-│   ├── cleanup.py
-│   ├── custom_handlers.py
-│   ├── filters.py
-│   ├── formatters.py
-│   ├── setup.py
-│   └── utils.py
+│   ├── preferences_window.py
+│   └── transcription_gui.py
 ├── state
 │   ├── __init__.py
 │   └── state_manager.py
@@ -45,20 +49,26 @@ my_application/
 ├── transcription
 │   ├── __init__.py
 │   └── transcriber.py
-├── transcriptions
 ├── utils
+│   ├── __init__.py
+│   ├── config.yaml
 │   ├── file_utils.py
 │   ├── gui_utils.py
-│   ├── sanitize_message
+│   ├── helpers.py
+│   ├── logging_utils.py
+│   ├── sanitize_message.py
 │   └── validator.py
 ├── .gitignore
 ├── LICENSE
 ├── README.md
 ├── VERSION
+├── combine_scripts.log
 ├── config-sameple.yaml
 ├── config.yaml
 ├── exceptions.py
-└── main.py
+├── main.py
+└── requirements.txt```
+
 
 
 
