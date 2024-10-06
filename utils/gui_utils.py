@@ -1,22 +1,18 @@
-# utils.py
-import os
-import sys
-import tkinter as tk
+# utils/gui_utils.py
 
-def get_absolute_path(relative_path):
-    """Returns the absolute path based on the script's location."""
-    script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-    return os.path.join(script_dir, relative_path)
+import tkinter as tk
 
 class CreateToolTip:
     """
-    Create a tooltip for a given widget
+    Create a tooltip for a given widget with enhanced customization.
     """
-    def __init__(self, widget, text='widget info'):
+    def __init__(self, widget, text='widget info', bg="#ffffe0", fg="black", wraplength=300):
         self.waittime = 500     # milliseconds
-        self.wraplength = 300   # pixels
+        self.wraplength = wraplength   # pixels
         self.widget = widget
         self.text = text
+        self.bg = bg
+        self.fg = fg
         self.widget.bind("<Enter>", self.enter)
         self.widget.bind("<Leave>", self.leave)
         self.widget.bind("<ButtonPress>", self.leave)
@@ -49,10 +45,12 @@ class CreateToolTip:
         self.tw = tk.Toplevel(self.widget)
         self.tw.wm_overrideredirect(True)  # removes all window managers
         self.tw.wm_geometry("+%d+%d" % (x, y))
-        label = tk.Label(self.tw, text=self.text, justify='left',
-                         background="#ffffe0", relief='solid', borderwidth=1,
-                         wraplength=self.wraplength,
-                         font=("tahoma", "8", "normal"))
+        label = tk.Label(
+            self.tw, text=self.text, justify='left',
+            background=self.bg, foreground=self.fg, relief='solid', borderwidth=1,
+            wraplength=self.wraplength,
+            font=("tahoma", "8", "normal")
+        )
         label.pack(ipadx=1)
 
     def hidetip(self):
@@ -61,6 +59,6 @@ class CreateToolTip:
         if tw:
             tw.destroy()
 
-def create_tooltip(widget, text):
-    """Utility function to create tooltips."""
-    CreateToolTip(widget, text)
+def create_tooltip(widget, text, bg="#ffffe0", fg="black", wraplength=300):
+    """Utility function to create tooltips with enhanced customization."""
+    CreateToolTip(widget, text, bg, fg, wraplength)

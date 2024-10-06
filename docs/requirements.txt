@@ -5,9 +5,11 @@ numpy>=1.25.0                # Fundamental package for scientific computing
 
 # Configuration Management
 PyYAML>=6.0                  # For parsing YAML configuration files
+pydantic>=2.0.0              # For configuration validation (upgraded for performance)
 
 # Logging
 python-json-logger>=2.0.7    # For structured JSON logging
+cerberus>=1.3.4              # For configuration schema validation (optional)
 
 # GUI and Visualization
 matplotlib>=3.7.1             # For plotting audio waveforms
@@ -16,9 +18,10 @@ pyautogui>=0.9.54             # For automating keyboard inputs
 # System Monitoring and Control
 psutil>=5.9.5                 # For accessing system details and process utilities
 keyboard>=0.13.5              # For capturing global keyboard events
+plyer>=2.1.0                 # For system notifications
 
 # Whisper Transcription
-openai-whisper>=2023.3.14     # OpenAI's Whisper model for transcription
+openai-whisper>=2023.3.14     # OpenAI's Whisper model for transcription (verify latest version if needed)
 
 # Optional Dependencies
 Pillow>=9.5.0                 # For enhanced tooltip functionality in the GUI
@@ -27,4 +30,4 @@ Pillow>=9.5.0                 # For enhanced tooltip functionality in the GUI
 noisereduce>=1.0.0            # For reducing background noise in audio clips
 
 # PyTorch (for GPU acceleration)
-torch>=2.0.0                  # PyTorch for deep learning. Install the appropriate CUDA version based on your system.
+torch>=2.0.0+cu118            # Specify the appropriate version for CUDA if using GPU
