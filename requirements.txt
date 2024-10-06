@@ -2,6 +2,7 @@
 sounddevice>=0.4.6           # For capturing audio input from the microphone
 soundfile>=0.10.3.post1      # For reading and writing sound files
 numpy>=1.25.0                # Fundamental package for scientific computing
+scipy>=1.9.0                 # Additional tools for scientific computing and audio processing
 
 # Configuration Management
 PyYAML>=6.0                  # For parsing YAML configuration files
@@ -18,13 +19,15 @@ psutil>=5.9.5                # For accessing system details and process utilitie
 keyboard>=0.13.5             # For capturing global keyboard events
 
 # Whisper Transcription
-openai-whisper>=2023.3.14    # OpenAI's Whisper model for transcription
+openai-whisper>=20240930     # OpenAI's Whisper model for transcription
+torch>=2.0.0                 # PyTorch for deep learning. Install the appropriate CUDA version based on your system
+torchvision>=0.15.0          # For additional vision utilities with PyTorch
+tiktoken>=0.3.3              # Tokenizer for OpenAI models
+tqdm>=4.64.0                 # Progress bar library used by openai-whisper
+more-itertools>=9.1.0        # Additional utilities for working with iterators
 
 # Optional Dependencies
 Pillow>=9.5.0                # For enhanced tooltip functionality in the GUI
 
 # Noise Reduction
 noisereduce>=1.0.0           # For reducing background noise in audio clips
-
-# PyTorch (for GPU acceleration)
-torch>=2.0.0                 # PyTorch for deep learning. Install the appropriate CUDA version based on your system.
