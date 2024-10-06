@@ -31,3 +31,6 @@ Pillow>=9.5.0                # For enhanced tooltip functionality in the GUI
 
 # Noise Reduction
 noisereduce>=1.0.0           # For reducing background noise in audio clips
+
+pydantic>=1.9.0   # Used for validating configuration data
+plyer>=2.0.0  # For sending system notifications
