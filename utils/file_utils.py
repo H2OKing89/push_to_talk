@@ -4,10 +4,10 @@ import os
 import sys
 
 def get_absolute_path(relative_path):
-    """Returns the absolute path based on the script's location."""
+    """Returns the absolute path based on the main script's location."""
     if getattr(sys, 'frozen', False):
-        # If the application is run as a bundle
-        script_dir = os.path.dirname(sys.executable)
+        # If the application is run as a bundle (e.g., PyInstaller)
+        base_path = sys._MEIPASS  # For PyInstaller
     else:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(script_dir, relative_path)
+        base_path = os.path.abspath(os.path.dirname(sys.argv[0]))
+    return os.path.join(base_path, relative_path)

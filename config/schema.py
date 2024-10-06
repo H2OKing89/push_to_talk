@@ -11,9 +11,14 @@ from .log_cleanup_config import LogCleanupConfig
 from .gui_settings_config import GUISettingsConfig
 from .model_support_config import ModelSupportConfig
 
+# config/schema.py
+
 class ModelSupportSchema(BaseModel):
-    default_model: str = "base"
-    available_models: List[str] = Field(default_factory=lambda: ["tiny", "base", "small", "medium", "large"])
+    default_model: str = "turbo"  # Set default to 'turbo' if desired
+    available_models: List[str] = Field(
+        default_factory=lambda: ["tiny", "base", "small", "medium", "large", "turbo"]
+    )
+
 
 class LoggingSchema(BaseModel):
     log_level: str = "INFO"

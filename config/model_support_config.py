@@ -4,7 +4,9 @@ from pydantic import BaseModel, Field, validator
 from typing import List
 
 class ModelSupportConfig(BaseModel):
-    available_models: List[str] = Field(default_factory=lambda: ['tiny', 'base', 'small', 'medium', 'large'])
+    available_models: List[str] = Field(
+        default_factory=lambda: ['tiny', 'base', 'small', 'medium', 'large', 'turbo']
+    )
     default_model: str = "base"
 
     @validator('default_model')

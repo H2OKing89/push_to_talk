@@ -25,6 +25,11 @@ class PreferencesWindow(tk.Toplevel):
 
     def create_widgets(self):
         try:
+
+            logger.debug(
+            f"Available models: {self.config.model_support.available_models}",
+            extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}
+        )
             # Model selection
             ttk.Label(self, text="Select Model:").grid(row=0, column=0, sticky=tk.W, padx=10, pady=5)
             self.model_var = tk.StringVar(value=self.config.model_support.default_model)
@@ -35,7 +40,7 @@ class PreferencesWindow(tk.Toplevel):
                 state="readonly"
             )
             self.model_combo.grid(row=0, column=1, padx=10, pady=5)
-
+    
             # Log level selection
             ttk.Label(self, text="Log Level:").grid(row=1, column=0, sticky=tk.W, padx=10, pady=5)
             self.log_level_var = tk.StringVar(value=self.config.Logging.log_level)

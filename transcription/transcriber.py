@@ -54,9 +54,23 @@ class Transcriber:
     def check_model_availability(self, model_name: str) -> bool:
         """Checks if the specified model is available."""
         available_models = whisper.available_models()
-        return model_name in available_models
+        return model_name in available_models or model_name == 'turbo'
 
-def load_whisper_model(model_name: str):
-    """Function to load Whisper model."""
-    transcriber = Transcriber()
-    return transcriber.load_whisper_model(model_name)
+def load_whisper_model(self, model_name: str):
+    """Loads the specified Whisper model."""
+    try:
+        if model_name == 'turbo':
+            # Load the 'turbo' model (ensure it's available and properly installed)
+            model = whisper.load_model('turbo')
+        else:
+            model = self.get_whisper_model(model_name)
+        return model
+    except Exception as e:
+        sanitized_error = sanitize_message(str(e))
+        logger.error(
+            f"Error loading Whisper model '{model_name}': {sanitized_error}",
+            extra={'correlation_id': state.correlation_id},
+            exc_info=True
+        )
+        raise
+
