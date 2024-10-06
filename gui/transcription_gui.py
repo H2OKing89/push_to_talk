@@ -8,6 +8,13 @@ from gui.preferences_window import PreferencesWindow
 from gui.help_dialogs import show_user_guide, show_about
 from state import state
 from utils.logging_utils import sanitize_message
+import matplotlib
+matplotlib.use('TkAgg')  # Use TkAgg backend for Tkinter
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import numpy as np
+from PIL import Image, ImageTk
+import os
 
 # Set up module-specific logger
 logger = logging.getLogger(__name__)
@@ -62,20 +69,36 @@ class TranscriptionGUI:
             self.help_menu.add_command(label="User Guide", command=show_user_guide)
             self.help_menu.add_command(label="About", command=show_about)
 
+            # Create a frame for the waveform and status indicators
+            self.top_frame = ttk.Frame(self.root)
+            self.top_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=False, padx=10, pady=10)
+
+            # Setup waveform display
+            self.setup_waveform_display()
+
+            # Create a frame for status and indicator
+            self.status_frame = ttk.Frame(self.root)
+            self.status_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=10)
+
+            # Recording indicator circle
+            self.indicator_canvas = tk.Canvas(self.status_frame, width=20, height=20, highlightthickness=0)
+            self.indicator_canvas.pack(side=tk.LEFT, padx=5)
+            self.indicator = self.indicator_canvas.create_oval(5, 5, 15, 15, fill='grey')
+
             # Status label
             self.status_var = tk.StringVar()
             self.status_var.set("Initializing...")
-            self.status_label = ttk.Label(self.root, textvariable=self.status_var)
-            self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
+            self.status_label = ttk.Label(self.status_frame, textvariable=self.status_var, font=("Helvetica", 12))
+            self.status_label.pack(side=tk.LEFT)
 
             # Progress bar
             self.progress_var = tk.IntVar()
             self.progress_bar = ttk.Progressbar(self.root, variable=self.progress_var, mode='indeterminate')
-            self.progress_bar.pack(side=tk.BOTTOM, fill=tk.X)
+            self.progress_bar.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=5)
 
             # Transcription text box
-            self.transcription_text = tk.Text(self.root, wrap=tk.WORD)
-            self.transcription_text.pack(expand=True, fill=tk.BOTH)
+            self.transcription_text = tk.Text(self.root, wrap=tk.WORD, font=("Helvetica", 12))
+            self.transcription_text.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
 
             # Exit button
             self.exit_button = ttk.Button(self.root, text="Exit", command=self.graceful_shutdown_callback)
@@ -84,9 +107,46 @@ class TranscriptionGUI:
             # Tooltip for exit button
             create_tooltip(self.exit_button, "Exit the application")
 
+            # Status colors mapping
+            self.STATUS_COLORS = {
+                "Recording": "red",
+                "Transcribing": "blue",
+                "Idle": "green",
+                "Error": "orange",
+            }
+
         except Exception as e:
             sanitized_error = sanitize_message(str(e))
             logger.error(f"Error setting up GUI: {sanitized_error}", exc_info=True)
+
+    def setup_waveform_display(self):
+        """Sets up the waveform display in the GUI."""
+        self.figure = Figure(figsize=(5, 2), dpi=100)
+        self.ax = self.figure.add_subplot(111)
+        self.ax.set_ylim([-1, 1])  # Adjust based on audio data range
+        self.ax.set_xlim(0, 1024)  # Number of samples to display
+        self.ax.set_title("Real-Time Audio Waveform")
+        self.ax.set_xlabel("Samples")
+        self.ax.set_ylabel("Amplitude")
+        self.line, = self.ax.plot([], [], lw=1, color='blue')
+        self.canvas = FigureCanvasTkAgg(self.figure, master=self.top_frame)
+        self.canvas.draw()
+        self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        # Initialize waveform data
+        self.waveform_data = np.zeros(1024)
+
+    def update_waveform(self, audio_chunk):
+        """Updates the waveform display with new audio data."""
+        try:
+            audio_data = audio_chunk.flatten()
+            self.waveform_data = np.concatenate((self.waveform_data, audio_data))[-1024:]
+            self.line.set_ydata(self.waveform_data)
+            self.line.set_xdata(np.arange(len(self.waveform_data)))
+            self.ax.draw_artist(self.line)
+            self.canvas.draw_idle()
+        except Exception as e:
+            logger.error(f"Failed to update waveform: {e}", exc_info=True)
 
     def start_progress(self):
         """
@@ -109,13 +169,19 @@ class TranscriptionGUI:
 
     def update_status(self, status):
         """
-        Updates the status label in the GUI.
+        Updates the status label and recording indicator.
 
         Args:
             status (str): The new status to display.
         """
         try:
             self.status_var.set(status)
+            color = self.STATUS_COLORS.get(status, "black")
+            self.status_label.config(foreground=color)
+            if status == "Recording":
+                self.indicator_canvas.itemconfig(self.indicator, fill='red')
+            else:
+                self.indicator_canvas.itemconfig(self.indicator, fill='grey')
         except Exception as e:
             logger.error(f"Failed to update status: {e}", exc_info=True)
 
@@ -166,8 +232,8 @@ class TranscriptionGUI:
         Starts a timer to automatically stop recording after a timeout.
         """
         try:
-            if self.config.recording_timeout > 0:
-                self.timeout_timer = self.root.after(self.config.recording_timeout * 1000, self.stop_recording_callback)
+            if self.config.max_recording_duration > 0:
+                self.timeout_timer = self.root.after(self.config.max_recording_duration * 1000, self.stop_recording_callback)
         except Exception as e:
             logger.error(f"Failed to start timeout timer: {e}", exc_info=True)
 
@@ -181,3 +247,12 @@ class TranscriptionGUI:
                 self.timeout_timer = None
         except Exception as e:
             logger.error(f"Failed to stop timeout timer: {e}", exc_info=True)
+
+    def graceful_shutdown(self):
+        """
+        Gracefully shuts down the application.
+        """
+        try:
+            self.graceful_shutdown_callback()
+        except Exception as e:
+            logger.error(f"Error during graceful shutdown: {e}", exc_info=True)

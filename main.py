@@ -1,12 +1,11 @@
 # main.py
 
 import logging
-
-# Existing imports
 import subprocess
 import tkinter as tk
 from tkinter import messagebox
 import threading
+import traceback
 import psutil
 import numpy as np
 import time
@@ -46,6 +45,19 @@ logger = logging.getLogger(__name__)
 # Generate a unique trace_id for this session
 trace_id = str(uuid.uuid4())
 state.trace_id = trace_id  # Assign trace_id to state object
+
+# Load configuration globally for access in all functions
+try:
+    config = load_config()
+except ConfigError as e:
+    # Show error message if configuration fails to load
+    root = tk.Tk()
+    root.withdraw()  # Hide the root window
+    messagebox.showerror("Configuration Error", f"Failed to load configuration: {e}")
+    sys.exit(1)
+
+# Set up logging
+setup_logging(config, state.correlation_id, state.trace_id)
 
 # Retry decorator to retry a function on failure
 def retry_on_failure(retries=3, delay=1):
@@ -109,7 +121,6 @@ def handle_unexpected_error(type, value, traceback_obj):
 
     # Generate crash report
     crash_report = f"Exception Type: {type.__name__}\nException Value: {sanitized_value}\n"
-    import traceback
     crash_report += "".join(traceback.format_tb(traceback_obj))
     # Add system info
     crash_report += "\nSystem Information:\n"
@@ -238,6 +249,8 @@ def audio_callback(indata, frames, time_info, status, gui):
         if gui.is_recording:
             with lock:
                 audio_buffer.append(indata.copy())
+            # Update the waveform visualization
+            gui.update_waveform(indata.copy())
             logger.debug(
                 f"Captured {len(indata)} frames of audio.",
                 extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id}
@@ -408,9 +421,12 @@ def load_model_in_thread(model_name, gui):
                 exc_info=True
             )
             gui.root.after(0, gui.update_status, "Error")
-            gui.root.after(0, lambda: messagebox.showerror("Model Load Error", f"Failed to load model '{model_name}'.\nError: {e}"))
+            # Capture the exception message
+            exception_message = str(e)
+            gui.root.after(0, lambda: messagebox.showerror("Model Load Error", f"Failed to load model '{model_name}'.\nError: {exception_message}"))
 
     threading.Thread(target=load_model, daemon=True).start()
+
 
 def set_log_level_callback(level):
     """
@@ -424,80 +440,69 @@ def set_log_level_callback(level):
 # Main execution block
 if __name__ == "__main__":
     try:
-        # Load the configuration
-        config = load_config()
-    except ConfigError as e:
-        # Show error message if configuration fails to load
+        # Initialize the main GUI window
         root = tk.Tk()
-        root.withdraw()  # Hide the root window
-        messagebox.showerror("Configuration Error", f"Failed to load configuration: {e}")
-        sys.exit(1)
-
-    # Set up logging
-    setup_logging(config, state.correlation_id, state.trace_id)
-    # Hook into the system's exception handler
-    sys.excepthook = handle_unexpected_error
-
-    # Initialize the main GUI window
-    root = tk.Tk()
-    gui = TranscriptionGUI(
-        root=root,
-        config=config,
-        model=None,  # Initial model is None; will be set after loading
-        stop_recording_callback=lambda: stop_recording(gui),
-        correlation_id=state.correlation_id,
-        trace_id=state.trace_id,
-        on_model_change_callback=None,  # Implement if needed
-        graceful_shutdown_callback=graceful_shutdown,
-        set_log_level_callback=set_log_level_callback  # Provide the log level callback
-    )
-
-    def schedule_model_loading():
-        """
-        Schedules the model loading after the GUI is initialized.
-        """
-        default_model_name = config.model_support.default_model
-        load_model_in_thread(default_model_name, gui)
-
-    # Schedule tasks after the GUI main loop starts
-    root.after(100, schedule_model_loading)
-    root.after(200, lambda: check_dependencies(config, gui))
-
-    try:
-        # Get the audio device index
-        device_index = config.audio_device_index or sd.default.device[0]
-        # Start the audio input stream
-        stream = start_audio_stream(
-            callback=lambda indata, frames, time_info, status: audio_callback(indata, frames, time_info, status, gui),
-            samplerate=config.samplerate,
-            channels=config.channels,
-            dtype=config.dtype,
-            device=device_index,
-            gui=gui  # Pass the GUI instance for notifications
-        )
-        logger.info("Audio stream started successfully.", extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id})
-    except AudioProcessingError as e:
-        sanitized_error = sanitize_message(str(e))
-        logger.error(
-            f"Failed to start audio input stream: {sanitized_error}",
-            extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id},
-            exc_info=True
-        )
-        schedule_graceful_shutdown(
-            gui,
-            lambda e=e: messagebox.showerror("Error", f"Failed to start audio input stream: {e}")
+        gui = TranscriptionGUI(
+            root=root,
+            config=config,
+            model=None,  # Initial model is None; will be set after loading
+            stop_recording_callback=lambda: stop_recording(gui),
+            correlation_id=state.correlation_id,
+            trace_id=state.trace_id,
+            on_model_change_callback=None,  # Implement if needed
+            graceful_shutdown_callback=graceful_shutdown,
+            set_log_level_callback=set_log_level_callback  # Provide the log level callback
         )
 
-    # Start the key listener thread
-    listener_thread = threading.Thread(target=key_listener, args=(gui, config), daemon=True)
-    listener_thread.start()
+        def schedule_model_loading():
+            """
+            Schedules the model loading after the GUI is initialized.
+            """
+            default_model_name = config.model_support.default_model
+            load_model_in_thread(default_model_name, gui)
 
-    # Start the system monitoring thread if enabled
-    if config.enable_system_monitoring:
-        system_monitor_thread = threading.Thread(target=log_system_usage, daemon=True)
-        system_monitor_thread.start()
+        # Schedule tasks after the GUI main loop starts
+        root.after(100, schedule_model_loading)
+        root.after(200, lambda: check_dependencies(config, gui))
 
-    # Set the command for the exit button to gracefully shutdown
-    gui.exit_button.config(command=graceful_shutdown)
-    # Start the GUI main loop
-    root.mainloop()
+        try:
+            # Get the audio device index
+            device_index = config.audio_device_index or sd.default.device[0]
+            # Start the audio input stream
+            stream = start_audio_stream(
+                callback=lambda indata, frames, time_info, status: audio_callback(indata, frames, time_info, status, gui),
+                samplerate=config.samplerate,
+                channels=config.channels,
+                dtype=config.dtype,
+                device=device_index,
+                gui=gui  # Pass the GUI instance for notifications
+            )
+            logger.info("Audio stream started successfully.", extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id})
+        except AudioProcessingError as e:
+            sanitized_error = sanitize_message(str(e))
+            logger.error(
+                f"Failed to start audio input stream: {sanitized_error}",
+                extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id},
+                exc_info=True
+            )
+            schedule_graceful_shutdown(
+                gui,
+                lambda e=e: messagebox.showerror("Error", f"Failed to start audio input stream: {e}")
+            )
+
+        # Start the key listener thread
+        listener_thread = threading.Thread(target=key_listener, args=(gui, config), daemon=True)
+        listener_thread.start()
+
+        # Start the system monitoring thread if enabled
+        if config.enable_system_monitoring:
+            system_monitor_thread = threading.Thread(target=log_system_usage, daemon=True)
+            system_monitor_thread.start()
+
+        # Set the command for the exit button to gracefully shutdown
+        gui.exit_button.config(command=graceful_shutdown)
+        # Start the GUI main loop
+        root.mainloop()
+    except Exception as e:
+        logger.critical(f"Fatal error in main execution: {e}", exc_info=True)
+        graceful_shutdown()

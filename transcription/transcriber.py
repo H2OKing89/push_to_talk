@@ -21,19 +21,19 @@ class Transcriber:
             device = "cuda" if torch.cuda.is_available() else "cpu"
             logger.info(
                 f"Loading Whisper model: {model_name} on device: {device}",
-                extra={'correlation_id': state.correlation_id}
+                extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id}
             )
-            model = whisper.load_model(model_name, device=device)
+            model = whisper.load_model(model_name, device=device, weights_only=True)
             logger.info(
                 f"Whisper model '{model_name}' loaded successfully on {device}.",
-                extra={'correlation_id': state.correlation_id}
+                extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id}
             )
             return model
         except Exception as e:
             sanitized_error = sanitize_message(str(e))
             logger.error(
                 f"Failed to load Whisper model '{model_name}': {sanitized_error}",
-                extra={'correlation_id': state.correlation_id},
+                extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id},
                 exc_info=True
             )
             raise
@@ -46,7 +46,7 @@ class Transcriber:
         except Exception as e:
             logger.error(
                 f"Error loading Whisper model '{model_name}': {sanitize_message(str(e))}",
-                extra={'correlation_id': state.correlation_id},
+                extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id},
                 exc_info=True
             )
             raise
@@ -56,21 +56,17 @@ class Transcriber:
         available_models = whisper.available_models()
         return model_name in available_models or model_name == 'turbo'
 
-def load_whisper_model(self, model_name: str):
+def load_whisper_model(model_name: str):
     """Loads the specified Whisper model."""
     try:
-        if model_name == 'turbo':
-            # Load the 'turbo' model (ensure it's available and properly installed)
-            model = whisper.load_model('turbo')
-        else:
-            model = self.get_whisper_model(model_name)
+        transcriber = Transcriber()
+        model = transcriber.load_whisper_model(model_name)
         return model
     except Exception as e:
         sanitized_error = sanitize_message(str(e))
         logger.error(
             f"Error loading Whisper model '{model_name}': {sanitized_error}",
-            extra={'correlation_id': state.correlation_id},
+            extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id},
             exc_info=True
         )
         raise
-
