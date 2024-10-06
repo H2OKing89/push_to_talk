@@ -34,7 +34,7 @@ def show_about():
     about_message = (
         "Push-to-Talk Transcription Application\n"
         "Version 1.0\n"
-        "Developed by OpenAI ChatGPT\n"
+        "Developed by Quentin\n"
         "© 2024 All Rights Reserved."
     )
     messagebox.showinfo("About", about_message)
