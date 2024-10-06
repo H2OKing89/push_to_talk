@@ -6,9 +6,9 @@ import logging
 from pydantic import ValidationError
 from .schema import ConfigSchema
 from .exceptions import ConfigError
-from utils.file_utils import get_absolute_path  # Adjusted import
+from utils.file_utils import get_absolute_path
 from state import state
-from utils.logging_utils import sanitize_message  # Adjusted import
+from utils.logging_utils import sanitize_message
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,10 @@ def load_config() -> ConfigSchema:
         try:
             config_data = yaml.safe_load(file) or {}
             config = ConfigSchema(**config_data)
-            logger.info("Configuration loaded and validated successfully.", extra={'correlation_id': state.correlation_id})
+            logger.info(
+                "Configuration loaded and validated successfully.",
+                extra={'correlation_id': state.correlation_id}
+            )
         except ValidationError as ve:
             sanitized_error = sanitize_message(str(ve))
             logger.error(
@@ -58,7 +61,10 @@ def save_config(config: ConfigSchema) -> None:
     try:
         with open(config_path, 'w') as file:
             yaml.safe_dump(config.dict(), file)
-            logger.info("Configuration saved successfully.", extra={'correlation_id': state.correlation_id})
+            logger.info(
+                "Configuration saved successfully.",
+                extra={'correlation_id': state.correlation_id}
+            )
     except Exception as e:
         sanitized_error = sanitize_message(str(e))
         logger.error(

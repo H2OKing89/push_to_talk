@@ -4,7 +4,7 @@ import whisper
 import logging
 import torch
 from functools import lru_cache
-from state.state_manager import state
+from state import state
 from utils.logging_utils import sanitize_message
 
 # Set up module-specific logger
@@ -55,3 +55,8 @@ class Transcriber:
         """Checks if the specified model is available."""
         available_models = whisper.available_models()
         return model_name in available_models
+
+def load_whisper_model(model_name: str):
+    """Function to load Whisper model."""
+    transcriber = Transcriber()
+    return transcriber.load_whisper_model(model_name)

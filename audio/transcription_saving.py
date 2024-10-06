@@ -1,32 +1,29 @@
-# audio/saving.py
+# audio/transcription_saving.py
 
 import os
 from datetime import datetime
-import soundfile as sf
 import logging
 import threading
 from utils.logging_utils import sanitize_message
 from audio.notifications import notify_user
 from audio.error import AudioProcessingError
-from state import state  # Imported correctly
+from state import state  # Ensure 'state' is imported
 
 # Set up module-specific logger
 logger = logging.getLogger(__name__)
 
-def save_audio_clip(
-    audio_data,
+def save_transcription(
+    transcription_text: str,
     save_directory: str,
-    samplerate: int,
     correlation_id: str,
     gui=None  # Pass the GUI instance for notifications
 ):
     """
-    Saves the audio clip to a file asynchronously.
+    Saves the transcription text to a file asynchronously.
 
     Args:
-        audio_data: The audio data to save.
-        save_directory (str): Directory to save audio files.
-        samplerate (int): Sampling rate.
+        transcription_text (str): The transcribed text to save.
+        save_directory (str): Directory to save transcription files.
         correlation_id (str): Correlation ID for logging.
         gui: GUI instance for user notifications.
     """
@@ -34,18 +31,19 @@ def save_audio_clip(
         try:
             timestamp = datetime.now().strftime("%m-%d-%Y_%H%M%S")
             os.makedirs(save_directory, exist_ok=True)
-            audio_file = os.path.join(save_directory, f"audio_{timestamp}.wav")
-            sf.write(audio_file, audio_data, samplerate)
-            logger.info(f"Audio clip saved to {audio_file}", extra={'correlation_id': state.correlation_id})
+            transcription_file = os.path.join(save_directory, f"transcription_{timestamp}.txt")
+            with open(transcription_file, 'w', encoding='utf-8') as f:
+                f.write(transcription_text)
+            logger.info(f"Transcription saved to {transcription_file}", extra={'correlation_id': state.correlation_id})
         except Exception as e:
             sanitized_error = sanitize_message(str(e))
             logger.error(
-                f"Failed to save audio clip: {sanitized_error}",
+                f"Failed to save transcription: {sanitized_error}",
                 extra={'correlation_id': state.correlation_id},
                 exc_info=True
             )
             # Notify the user about the failure
             if gui:
-                notify_user(gui, "Save Audio Error", f"Failed to save audio clip.\nError: {e}", level="error")
+                notify_user(gui, "Save Transcription Error", f"Failed to save transcription.\nError: {e}", level="error")
     
     threading.Thread(target=save_thread, daemon=True).start()

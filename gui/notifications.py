@@ -2,7 +2,7 @@
 
 from plyer import notification  # For system notifications
 import logging
-from logger import sanitize_message
+from utils.logging_utils import sanitize_message  # Corrected import
 
 logger = logging.getLogger(__name__)
 

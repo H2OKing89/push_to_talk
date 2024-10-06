@@ -1,6 +1,8 @@
+# utils/helpers.py
+
 import logging
 from state.state_manager import state
-from utils.logging_utils import sanitize_message  # Ensure sanitize_message is imported
+from utils.logging_utils import sanitize_message
 
 logger = logging.getLogger(__name__)
 
@@ -16,11 +18,15 @@ def load_model_with_retry(model_name, logger, correlation_id, trace_id):
     try:
         # Replace this part with actual model loading logic, for example:
         # model = whisper.load_model(model_name)
-        model = None  # Placeholder for model loading
+        import whisper  # Ensure whisper is imported
+        model = whisper.load_model(model_name)
         if not model:
             raise ValueError("Model loading failed.")
         return model
     except Exception as e:
-        sanitized_error = sanitize_message(str(e))  # Ensure sanitize_message is used correctly
-        logger.error(f"Failed to load model: {sanitized_error}", extra={'correlation_id': correlation_id, 'trace_id': trace_id})
+        sanitized_error = sanitize_message(str(e))
+        logger.error(
+            f"Failed to load model: {sanitized_error}",
+            extra={'correlation_id': correlation_id, 'trace_id': trace_id}
+        )
         raise e

@@ -1,0 +1,30 @@
+# Audio Processing Dependencies
+sounddevice>=0.4.6           # For capturing audio input from the microphone
+soundfile>=0.10.3.post1      # For reading and writing sound files
+numpy>=1.25.0                # Fundamental package for scientific computing
+
+# Configuration Management
+PyYAML>=6.0                  # For parsing YAML configuration files
+
+# Logging
+python-json-logger>=2.0.7    # For structured JSON logging
+
+# GUI and Visualization
+matplotlib>=3.7.1            # For plotting audio waveforms
+pyautogui>=0.9.54            # For automating keyboard inputs
+
+# System Monitoring and Control
+psutil>=5.9.5                # For accessing system details and process utilities
+keyboard>=0.13.5             # For capturing global keyboard events
+
+# Whisper Transcription
+openai-whisper>=2023.3.14    # OpenAI's Whisper model for transcription
+
+# Optional Dependencies
+Pillow>=9.5.0                # For enhanced tooltip functionality in the GUI
+
+# Noise Reduction
+noisereduce>=1.0.0           # For reducing background noise in audio clips
+
+# PyTorch (for GPU acceleration)
+torch>=2.0.0                 # PyTorch for deep learning. Install the appropriate CUDA version based on your system.

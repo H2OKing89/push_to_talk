@@ -1,6 +1,6 @@
 # gui/__init__.py
 
-from .main_gui import TranscriptionGUI
+from .transcription_gui import TranscriptionGUI
 from .preferences_window import PreferencesWindow
 from .help_dialogs import show_user_guide, show_about
 from .notifications import send_system_notification
