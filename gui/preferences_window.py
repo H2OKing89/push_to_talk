@@ -13,7 +13,16 @@ from state import state
 logger = logging.getLogger(__name__)
 
 class PreferencesWindow(tk.Toplevel):
-    def __init__(self, parent, config: ConfigSchema, correlation_id, trace_id, on_model_change_callback, set_log_level_callback):
+    def __init__(
+        self,
+        parent,
+        config: ConfigSchema,
+        correlation_id,
+        trace_id,
+        on_model_change_callback,
+        set_log_level_callback,
+        apply_always_on_top_callback=None
+    ):
         super().__init__(parent)
         self.title("Preferences")
         self.config = config
@@ -21,15 +30,59 @@ class PreferencesWindow(tk.Toplevel):
         self.trace_id = trace_id
         self.on_model_change_callback = on_model_change_callback
         self.set_log_level_callback = set_log_level_callback
+        self.apply_always_on_top_callback = apply_always_on_top_callback  # Store the callback
+
+        # **Make the Preferences window transient and modal**
+        self.transient(parent)  # Set to be on top of the main window
+        self.grab_set()         # Make the window modal
+        self.focus_set()        # Set focus to the Preferences window
+        self.attributes('-topmost', True)  # Ensure it's always on top
+
+        # **Center the Preferences window over the main window**
+        self.center_window(parent)
+
         self.create_widgets()
+
+    def center_window(self, parent):
+        """Centers the Preferences window over the parent window."""
+        self.update_idletasks()  # Ensure window dimensions are calculated
+
+        # Get the parent window's position and size
+        parent_x = parent.winfo_rootx()
+        parent_y = parent.winfo_rooty()
+        parent_width = parent.winfo_width()
+        parent_height = parent.winfo_height()
+
+        # Get the Preferences window's size
+        window_width = self.winfo_width()
+        window_height = self.winfo_height()
+
+        # If window size is not yet determined, set a default size
+        if window_width <= 1 and window_height <= 1:
+            window_width = 400
+            window_height = 300
+            self.geometry(f"{window_width}x{window_height}")
+
+        # Recalculate in case the window was just sized
+        self.update_idletasks()
+
+        # Get updated window size
+        window_width = self.winfo_width()
+        window_height = self.winfo_height()
+
+        # Calculate position to center the window
+        position_right = parent_x + (parent_width // 2) - (window_width // 2)
+        position_down = parent_y + (parent_height // 2) - (window_height // 2)
+
+        # Set the geometry of the Preferences window
+        self.geometry(f"+{position_right}+{position_down}")
 
     def create_widgets(self):
         try:
-
             logger.debug(
-            f"Available models: {self.config.model_support.available_models}",
-            extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}
-        )
+                f"Available models: {self.config.model_support.available_models}",
+                extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}
+            )
             # Model selection
             ttk.Label(self, text="Select Model:").grid(row=0, column=0, sticky=tk.W, padx=10, pady=5)
             self.model_var = tk.StringVar(value=self.config.model_support.default_model)
@@ -118,12 +171,18 @@ class PreferencesWindow(tk.Toplevel):
             self.system_monitoring_checkbox = ttk.Checkbutton(self, variable=self.system_monitoring_var)
             self.system_monitoring_checkbox.grid(row=8, column=1, padx=10, pady=5)
 
+            # **New Checkbox for "Always on Top"**
+            ttk.Label(self, text="Always on Top:").grid(row=9, column=0, sticky=tk.W, padx=10, pady=5)
+            self.always_on_top_var = tk.BooleanVar(value=self.config.always_on_top)
+            self.always_on_top_checkbox = ttk.Checkbutton(self, variable=self.always_on_top_var)
+            self.always_on_top_checkbox.grid(row=9, column=1, padx=10, pady=5)
+
             # Save and Cancel buttons
             self.save_button = ttk.Button(self, text="Save", command=self.save_preferences)
-            self.save_button.grid(row=9, column=0, padx=10, pady=10, sticky=tk.E)
+            self.save_button.grid(row=10, column=0, padx=10, pady=10, sticky=tk.E)
 
             self.cancel_button = ttk.Button(self, text="Cancel", command=self.destroy)
-            self.cancel_button.grid(row=9, column=1, padx=10, pady=10, sticky=tk.W)
+            self.cancel_button.grid(row=10, column=1, padx=10, pady=10, sticky=tk.W)
 
             # Tooltip for Save button
             create_tooltip(self.save_button, "Save your preferences")
@@ -185,6 +244,16 @@ class PreferencesWindow(tk.Toplevel):
 
             # Update system monitoring
             self.config.enable_system_monitoring = self.system_monitoring_var.get()
+
+            # **Update Always on Top Setting**
+            self.config.always_on_top = self.always_on_top_var.get()
+            logger.info(
+                f"Always on Top set to {self.config.always_on_top}",
+                extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}
+            )
+            # **Invoke the callback to update the main window**
+            if self.apply_always_on_top_callback:
+                self.apply_always_on_top_callback(self.config.always_on_top)
 
             # Save the updated configuration
             save_config(self.config)

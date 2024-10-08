@@ -46,6 +46,7 @@ class TranscriptionGUI:
         self.timeout_timer = None
 
         self.setup_gui()
+        self.apply_always_on_top()  # Apply the Always on Top setting upon initialization
 
     def setup_gui(self):
         try:
@@ -66,7 +67,7 @@ class TranscriptionGUI:
             # Help menu
             self.help_menu = tk.Menu(self.menu_bar, tearoff=0)
             self.menu_bar.add_cascade(label="Help", menu=self.help_menu)
-            self.help_menu.add_command(label="User Guide", command=show_user_guide)
+            self.help_menu.add_command(label="User Guide", command=lambda: show_user_guide(self.root, self.config))
             self.help_menu.add_command(label="About", command=show_about)
 
             # Create a frame for the waveform and status indicators
@@ -222,10 +223,41 @@ class TranscriptionGUI:
                 correlation_id=self.correlation_id,
                 trace_id=self.trace_id,
                 on_model_change_callback=self.on_model_change_callback,
-                set_log_level_callback=self.set_log_level_callback
+                set_log_level_callback=self.set_log_level_callback,
+                apply_always_on_top_callback=self.update_always_on_top  # Pass the callback here
             )
         except Exception as e:
             logger.error(f"Failed to open Preferences window: {e}", exc_info=True)
+
+    def apply_always_on_top(self):
+        """
+        Applies the 'Always on Top' setting to the main window based on the configuration.
+        """
+        try:
+            self.root.attributes('-topmost', self.config.always_on_top)
+            logger.info(
+                f"'Always on Top' set to {self.config.always_on_top}",
+                extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}
+            )
+        except Exception as e:
+            logger.error(f"Failed to apply 'Always on Top' setting: {e}", exc_info=True)
+
+    def update_always_on_top(self, new_setting: bool):
+        """
+        Updates the 'Always on Top' setting dynamically.
+
+        Args:
+            new_setting (bool): The new setting for 'Always on Top'.
+        """
+        try:
+            self.root.attributes('-topmost', new_setting)
+            self.config.always_on_top = new_setting
+            logger.info(
+                f"'Always on Top' updated to {new_setting}",
+                extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}
+            )
+        except Exception as e:
+            logger.error(f"Failed to update 'Always on Top' setting: {e}", exc_info=True)
 
     def start_timeout_timer(self):
         """

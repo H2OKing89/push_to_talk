@@ -27,6 +27,16 @@ def main():
         messagebox.showerror("Model Load Error", str(e))
         sys.exit(1)
 
+    # Define a callback for updating log level
+    def update_log_level(new_level: str):
+        logging.getLogger().setLevel(new_level)
+        logger.info(f"Log level updated to {new_level}", extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id})
+
+    # Implement the graceful shutdown function
+    def gui_graceful_shutdown():
+        logger.info("Graceful shutdown initiated from GUI.", extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id})
+        root.destroy()
+
     gui = TranscriptionGUI(
         root=root,
         config=config,
@@ -35,13 +45,13 @@ def main():
         correlation_id=state.correlation_id,
         trace_id=state.trace_id,
         on_model_change_callback=None,  # Implement if needed
-        graceful_shutdown_callback=gui_graceful_shutdown  # Define this function
+        graceful_shutdown_callback=gui_graceful_shutdown,  # Define this function
+        set_log_level_callback=update_log_level  # Define this function
     )
 
-    # Implement the graceful shutdown function
-    def gui_graceful_shutdown():
-        logger.info("Graceful shutdown initiated from GUI.", extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id})
-        root.destroy()
+    # Define a callback for updating 'Always on Top'
+    def update_always_on_top(new_setting: bool):
+        gui.update_always_on_top(new_setting)
 
     # Assign the graceful shutdown function
     gui.graceful_shutdown_callback = gui_graceful_shutdown

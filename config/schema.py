@@ -5,20 +5,16 @@ from typing import List, Optional
 import sounddevice as sd
 
 # Ensure that these imports point to existing modules or adjust as necessary
-# If these modules don't exist, you should define them or remove these imports
 from .logging_config import LoggingConfig
 from .log_cleanup_config import LogCleanupConfig
 from .gui_settings_config import GUISettingsConfig
 from .model_support_config import ModelSupportConfig
-
-# config/schema.py
 
 class ModelSupportSchema(BaseModel):
     default_model: str = "turbo"  # Set default to 'turbo' if desired
     available_models: List[str] = Field(
         default_factory=lambda: ["tiny", "base", "small", "medium", "large", "turbo"]
     )
-
 
 class LoggingSchema(BaseModel):
     log_level: str = "INFO"
@@ -48,6 +44,9 @@ class ConfigSchema(BaseModel):
     use_fp16: bool = True
     noise_reduction_algorithm: Optional[str] = "noisereduce"
     recording_timeout: int = 60  # Default to 60 seconds
+    
+    # New field for Always on Top
+    always_on_top: bool = False  # Default to not always on top
 
     class Config:
         protected_namespaces = ()
