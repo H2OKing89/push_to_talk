@@ -64,7 +64,7 @@ class MainApplication:
             root = tk.Tk()
             root.withdraw()  # Hide the root window
             messagebox.showerror("Configuration Error", f"Failed to load configuration: {e}")
-            sys.exit(1)
+            graceful_shutdown()  # Use the helper function to shutdown
 
         # Set up logging
         setup_logging(self.config, state.correlation_id, state.trace_id)
@@ -317,17 +317,13 @@ class MainApplication:
         """
         Starts recording audio.
         """
-        if not self.config.save_audio and not self.config.save_transcription:
-            logger.info("Both Save Audio and Save Transcription are disabled. Recording is not started.", extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id})
-            messagebox.showinfo("Info", "Both Save Audio and Save Transcription are disabled. Recording is not started.")
-            return
         self.play_start_sound()
         with lock:
             if not self.gui.is_recording:
                 self.gui.is_recording = True
                 audio_buffer.clear()
                 self.gui.update_status("Recording")
-                logger.info("Recording started.", extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id})
+                logger.info("Recording started for transcription purposes.", extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id})
                 self.gui.start_timeout_timer()
 
     def stop_recording(self):
@@ -404,6 +400,9 @@ class MainApplication:
             self.gui.update_status("Error")
             messagebox.showerror("Error", f"Transcription failed: {e}")
         finally:
+            # Clear the audio buffer to delete temporary audio data
+            with lock:
+                audio_buffer.clear()
             self.gui.stop_progress()
 
     def key_listener(self):
@@ -521,26 +520,6 @@ class MainApplication:
                 exc_info=True
             )
             sys.exit(1)
-
-    def show_dependency_error_and_shutdown(self, error):
-        """
-        Shows an error message for dependency failures and initiates shutdown.
-
-        Args:
-            error: The exception that occurred.
-        """
-        messagebox.showerror("Dependency Error", f"Audio input device not available: {error}")
-        self.graceful_shutdown()
-
-    def show_audio_stream_error_and_shutdown(self, error):
-        """
-        Shows an error message for audio stream failures and initiates shutdown.
-
-        Args:
-            error: The exception that occurred.
-        """
-        messagebox.showerror("Error", f"Failed to start audio input stream: {error}")
-        self.graceful_shutdown()
 
     def run(self):
         """
