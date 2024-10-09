@@ -1,35 +1,38 @@
 # transcription/transcriber.py
 
-import whisper
 import logging
+import whisper
 import torch
-from functools import lru_cache
-from state import state
 from utils.logging_utils import sanitize_message
+from config.schema import ConfigSchema
+from utils.helpers import load_model_with_retry
+from state import state
 
-# Set up module-specific logger
 logger = logging.getLogger(__name__)
 
 class Transcriber:
-    def __init__(self):
-        pass
+    def __init__(self, config: ConfigSchema):
+        self.config = config
+        self.model = None
 
-    @lru_cache(maxsize=None)
-    def get_whisper_model(self, model_name: str):
-        """Caches Whisper models to reduce load times."""
+    def get_whisper_model(self, model_name):
+        """
+        Loads the Whisper model based on the provided model name.
+
+        Args:
+            model_name (str): The name of the model to load.
+
+        Returns:
+            whisper.Model: The loaded Whisper model.
+        """
         try:
-            device = "cuda" if torch.cuda.is_available() else "cpu"
             logger.info(
-                f"Loading Whisper model: {model_name} on device: {device}",
+                f"Loading Whisper model: {model_name} on device: {self.get_device()}",
                 extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id}
             )
-            model = whisper.load_model(model_name, device=device, weights_only=True)
-            logger.info(
-                f"Whisper model '{model_name}' loaded successfully on {device}.",
-                extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id}
-            )
+            model = whisper.load_model(model_name, device=self.get_device())
             return model
-        except Exception as e:
+        except TypeError as e:
             sanitized_error = sanitize_message(str(e))
             logger.error(
                 f"Failed to load Whisper model '{model_name}': {sanitized_error}",
@@ -37,36 +40,50 @@ class Transcriber:
                 exc_info=True
             )
             raise
-
-    def load_whisper_model(self, model_name: str):
-        """Loads the specified Whisper model."""
-        try:
-            model = self.get_whisper_model(model_name)
-            return model
         except Exception as e:
+            sanitized_error = sanitize_message(str(e))
             logger.error(
-                f"Error loading Whisper model '{model_name}': {sanitize_message(str(e))}",
+                f"Unexpected error loading Whisper model '{model_name}': {sanitized_error}",
                 extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id},
                 exc_info=True
             )
             raise
 
-    def check_model_availability(self, model_name: str) -> bool:
-        """Checks if the specified model is available."""
-        available_models = whisper.available_models()
-        return model_name in available_models or model_name == 'turbo'
+    def get_device(self):
+        """
+        Determines the device to load the model on.
 
-def load_whisper_model(model_name: str):
-    """Loads the specified Whisper model."""
-    try:
-        transcriber = Transcriber()
-        model = transcriber.load_whisper_model(model_name)
-        return model
-    except Exception as e:
-        sanitized_error = sanitize_message(str(e))
-        logger.error(
-            f"Error loading Whisper model '{model_name}': {sanitized_error}",
-            extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id},
-            exc_info=True
-        )
-        raise
+        Returns:
+            str: The device ('cpu' or 'cuda').
+        """
+        if torch.cuda.is_available() and self.config.use_gpu:
+            return "cuda"
+        else:
+            return "cpu"
+
+    def load_whisper_model(self, model_name):
+        """
+        Loads the Whisper model with retry mechanism.
+
+        Args:
+            model_name (str): The name of the model to load.
+
+        Returns:
+            whisper.Model: The loaded Whisper model.
+        """
+        try:
+            self.model = load_model_with_retry(
+                self.get_whisper_model,
+                model_name=model_name,
+                retries=3,
+                delay=2
+            )
+            return self.model
+        except Exception as e:
+            sanitized_error = sanitize_message(str(e))
+            logger.error(
+                f"Error loading Whisper model '{model_name}': {sanitized_error}",
+                extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id},
+                exc_info=True
+            )
+            raise

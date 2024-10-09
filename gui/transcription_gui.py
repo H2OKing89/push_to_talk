@@ -62,7 +62,7 @@ class TranscriptionGUI:
             self.menu_bar.add_cascade(label="File", menu=self.file_menu)
             self.file_menu.add_command(label="Preferences", command=self.open_preferences)
             self.file_menu.add_separator()
-            self.file_menu.add_command(label="Exit", command=self.graceful_shutdown_callback)
+            self.file_menu.add_command(label="Exit", command=self.graceful_shutdown)
 
             # Help menu
             self.help_menu = tk.Menu(self.menu_bar, tearoff=0)
@@ -70,14 +70,14 @@ class TranscriptionGUI:
             self.help_menu.add_command(label="User Guide", command=lambda: show_user_guide(self.root, self.config))
             self.help_menu.add_command(label="About", command=show_about)
 
-            # Create a frame for the waveform and status indicators
+            # Create a frame for the waveform display
             self.top_frame = ttk.Frame(self.root)
             self.top_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=False, padx=10, pady=10)
 
             # Setup waveform display
             self.setup_waveform_display()
 
-            # Create a frame for status and indicator
+            # Create a frame for status and progress indicators
             self.status_frame = ttk.Frame(self.root)
             self.status_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=10)
 
@@ -88,21 +88,20 @@ class TranscriptionGUI:
 
             # Status label
             self.status_var = tk.StringVar()
-            self.status_var.set("Initializing...")
+            self.status_var.set("Ready")
             self.status_label = ttk.Label(self.status_frame, textvariable=self.status_var, font=("Helvetica", 12))
-            self.status_label.pack(side=tk.LEFT)
+            self.status_label.pack(side=tk.LEFT, padx=(0, 10))
 
             # Progress bar
-            self.progress_var = tk.IntVar()
-            self.progress_bar = ttk.Progressbar(self.root, variable=self.progress_var, mode='indeterminate')
-            self.progress_bar.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=5)
+            self.progress_bar = ttk.Progressbar(self.status_frame, mode='indeterminate')
+            self.progress_bar.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(10, 0))
 
             # Transcription text box
             self.transcription_text = tk.Text(self.root, wrap=tk.WORD, font=("Helvetica", 12))
             self.transcription_text.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
 
             # Exit button
-            self.exit_button = ttk.Button(self.root, text="Exit", command=self.graceful_shutdown_callback)
+            self.exit_button = ttk.Button(self.root, text="Exit", command=self.graceful_shutdown)
             self.exit_button.pack(side=tk.RIGHT, padx=10, pady=10)
 
             # Tooltip for exit button
@@ -114,11 +113,13 @@ class TranscriptionGUI:
                 "Transcribing": "blue",
                 "Idle": "green",
                 "Error": "orange",
+                "Ready": "black"
             }
 
         except Exception as e:
             sanitized_error = sanitize_message(str(e))
             logger.error(f"Error setting up GUI: {sanitized_error}", exc_info=True)
+            messagebox.showerror("GUI Setup Error", f"Failed to set up the GUI: {e}")
 
     def setup_waveform_display(self):
         """Sets up the waveform display in the GUI."""
@@ -164,7 +165,7 @@ class TranscriptionGUI:
         """
         try:
             self.progress_bar.stop()
-            self.progress_var.set(0)
+            self.progress_bar['value'] = 0
         except Exception as e:
             logger.error(f"Failed to stop progress bar: {e}", exc_info=True)
 
@@ -181,6 +182,12 @@ class TranscriptionGUI:
             self.status_label.config(foreground=color)
             if status == "Recording":
                 self.indicator_canvas.itemconfig(self.indicator, fill='red')
+            elif status == "Transcribing":
+                self.indicator_canvas.itemconfig(self.indicator, fill='blue')
+            elif status == "Idle":
+                self.indicator_canvas.itemconfig(self.indicator, fill='green')
+            elif status == "Error":
+                self.indicator_canvas.itemconfig(self.indicator, fill='orange')
             else:
                 self.indicator_canvas.itemconfig(self.indicator, fill='grey')
         except Exception as e:
@@ -209,8 +216,10 @@ class TranscriptionGUI:
         try:
             self.model = model
             logger.info(f"Transcription model set to {model}.", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
+            self.update_status("Idle")
         except Exception as e:
             logger.error(f"Failed to set model: {e}", exc_info=True)
+            self.update_status("Error")
 
     def open_preferences(self):
         """
@@ -228,6 +237,7 @@ class TranscriptionGUI:
             )
         except Exception as e:
             logger.error(f"Failed to open Preferences window: {e}", exc_info=True)
+            messagebox.showerror("Preferences Error", f"Failed to open Preferences window: {e}")
 
     def apply_always_on_top(self):
         """
@@ -288,3 +298,4 @@ class TranscriptionGUI:
             self.graceful_shutdown_callback()
         except Exception as e:
             logger.error(f"Error during graceful shutdown: {e}", exc_info=True)
+            messagebox.showerror("Shutdown Error", f"Failed to shut down gracefully: {e}")

@@ -1,5 +1,3 @@
-# gui/preferences_window.py
-
 import tkinter as tk
 from tkinter import ttk, messagebox
 import logging
@@ -60,7 +58,7 @@ class PreferencesWindow(tk.Toplevel):
         # If window size is not yet determined, set a default size
         if window_width <= 1 and window_height <= 1:
             window_width = 400
-            window_height = 300
+            window_height = 400  # Increased height to accommodate more settings
             self.geometry(f"{window_width}x{window_height}")
 
         # Recalculate in case the window was just sized
@@ -83,35 +81,45 @@ class PreferencesWindow(tk.Toplevel):
                 f"Available models: {self.config.model_support.available_models}",
                 extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}
             )
+            # Create a main frame to hold all widgets with padding
+            main_frame = ttk.Frame(self, padding="10")
+            main_frame.pack(fill=tk.BOTH, expand=True)
+
+            # Configure grid layout with appropriate row and column weights
+            for i in range(10):
+                main_frame.rowconfigure(i, weight=1)
+            main_frame.columnconfigure(0, weight=1)
+            main_frame.columnconfigure(1, weight=2)
+
             # Model selection
-            ttk.Label(self, text="Select Model:").grid(row=0, column=0, sticky=tk.W, padx=10, pady=5)
+            ttk.Label(main_frame, text="Select Model:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
             self.model_var = tk.StringVar(value=self.config.model_support.default_model)
             self.model_combo = ttk.Combobox(
-                self,
+                main_frame,
                 textvariable=self.model_var,
                 values=self.config.model_support.available_models,
                 state="readonly"
             )
-            self.model_combo.grid(row=0, column=1, padx=10, pady=5)
-    
+            self.model_combo.grid(row=0, column=1, padx=5, pady=5, sticky=tk.EW)
+
             # Log level selection
-            ttk.Label(self, text="Log Level:").grid(row=1, column=0, sticky=tk.W, padx=10, pady=5)
+            ttk.Label(main_frame, text="Log Level:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
             self.log_level_var = tk.StringVar(value=self.config.Logging.log_level)
             self.log_level_combo = ttk.Combobox(
-                self,
+                main_frame,
                 textvariable=self.log_level_var,
                 values=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                 state="readonly"
             )
-            self.log_level_combo.grid(row=1, column=1, padx=10, pady=5)
+            self.log_level_combo.grid(row=1, column=1, padx=5, pady=5, sticky=tk.EW)
 
             # Audio device selection
-            ttk.Label(self, text="Select Audio Device:").grid(row=2, column=0, sticky=tk.W, padx=10, pady=5)
+            ttk.Label(main_frame, text="Select Audio Device:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=5)
             self.audio_device_var = tk.StringVar()
             input_devices = [device for device in sd.query_devices() if device['max_input_channels'] > 0]
             device_names = [f"{idx}: {device['name']}" for idx, device in enumerate(input_devices)]
             self.audio_device_combo = ttk.Combobox(
-                self,
+                main_frame,
                 textvariable=self.audio_device_var,
                 values=device_names,
                 state="readonly"
@@ -127,67 +135,71 @@ class PreferencesWindow(tk.Toplevel):
                     self.audio_device_var.set(device_names[default_device])
                 else:
                     self.audio_device_var.set(device_names[0] if device_names else "")
-            self.audio_device_combo.grid(row=2, column=1, padx=10, pady=5)
+            self.audio_device_combo.grid(row=2, column=1, padx=5, pady=5, sticky=tk.EW)
 
             # Enable Noise Reduction
-            ttk.Label(self, text="Enable Noise Reduction:").grid(row=3, column=0, sticky=tk.W, padx=10, pady=5)
+            ttk.Label(main_frame, text="Enable Noise Reduction:").grid(row=3, column=0, sticky=tk.W, padx=5, pady=5)
             self.noise_reduction_var = tk.BooleanVar(value=self.config.enable_noise_reduction)
-            self.noise_reduction_checkbox = ttk.Checkbutton(self, variable=self.noise_reduction_var)
-            self.noise_reduction_checkbox.grid(row=3, column=1, padx=10, pady=5)
+            self.noise_reduction_checkbox = ttk.Checkbutton(main_frame, variable=self.noise_reduction_var)
+            self.noise_reduction_checkbox.grid(row=3, column=1, padx=5, pady=5, sticky=tk.W)
 
             # Maximum recording duration
-            ttk.Label(self, text="Max Recording Duration (seconds):").grid(row=4, column=0, sticky=tk.W, padx=10, pady=5)
+            ttk.Label(main_frame, text="Max Recording Duration (seconds):").grid(row=4, column=0, sticky=tk.W, padx=5, pady=5)
             self.max_duration_var = tk.IntVar(value=self.config.max_recording_duration)
             self.max_duration_spinbox = ttk.Spinbox(
-                self,
+                main_frame,
                 from_=10,
                 to=600,
                 increment=1,
                 textvariable=self.max_duration_var
             )
-            self.max_duration_spinbox.grid(row=4, column=1, padx=10, pady=5)
+            self.max_duration_spinbox.grid(row=4, column=1, padx=5, pady=5, sticky=tk.EW)
 
             # Save audio option
-            ttk.Label(self, text="Save Audio Recordings:").grid(row=5, column=0, sticky=tk.W, padx=10, pady=5)
+            ttk.Label(main_frame, text="Save Audio Recordings:").grid(row=5, column=0, sticky=tk.W, padx=5, pady=5)
             self.save_audio_var = tk.BooleanVar(value=self.config.save_audio)
-            self.save_audio_checkbox = ttk.Checkbutton(self, variable=self.save_audio_var)
-            self.save_audio_checkbox.grid(row=5, column=1, padx=10, pady=5)
+            self.save_audio_checkbox = ttk.Checkbutton(main_frame, variable=self.save_audio_var)
+            self.save_audio_checkbox.grid(row=5, column=1, padx=5, pady=5, sticky=tk.W)
 
             # Save transcription option
-            ttk.Label(self, text="Save Transcriptions:").grid(row=6, column=0, sticky=tk.W, padx=10, pady=5)
+            ttk.Label(main_frame, text="Save Transcriptions:").grid(row=6, column=0, sticky=tk.W, padx=5, pady=5)
             self.save_transcription_var = tk.BooleanVar(value=self.config.save_transcription)
-            self.save_transcription_checkbox = ttk.Checkbutton(self, variable=self.save_transcription_var)
-            self.save_transcription_checkbox.grid(row=6, column=1, padx=10, pady=5)
+            self.save_transcription_checkbox = ttk.Checkbutton(main_frame, variable=self.save_transcription_var)
+            self.save_transcription_checkbox.grid(row=6, column=1, padx=5, pady=5, sticky=tk.W)
 
             # Key combination for recording
-            ttk.Label(self, text="Key Combination for Recording:").grid(row=7, column=0, sticky=tk.W, padx=10, pady=5)
+            ttk.Label(main_frame, text="Key Combination for Recording:").grid(row=7, column=0, sticky=tk.W, padx=5, pady=5)
             self.key_combination_var = tk.StringVar(value=" + ".join(self.config.key_combination))
-            self.key_combination_entry = ttk.Entry(self, textvariable=self.key_combination_var)
-            self.key_combination_entry.grid(row=7, column=1, padx=10, pady=5)
+            self.key_combination_entry = ttk.Entry(main_frame, textvariable=self.key_combination_var)
+            self.key_combination_entry.grid(row=7, column=1, padx=5, pady=5, sticky=tk.EW)
 
             # Enable system monitoring
-            ttk.Label(self, text="Enable System Monitoring:").grid(row=8, column=0, sticky=tk.W, padx=10, pady=5)
+            ttk.Label(main_frame, text="Enable System Monitoring:").grid(row=8, column=0, sticky=tk.W, padx=5, pady=5)
             self.system_monitoring_var = tk.BooleanVar(value=self.config.enable_system_monitoring)
-            self.system_monitoring_checkbox = ttk.Checkbutton(self, variable=self.system_monitoring_var)
-            self.system_monitoring_checkbox.grid(row=8, column=1, padx=10, pady=5)
+            self.system_monitoring_checkbox = ttk.Checkbutton(main_frame, variable=self.system_monitoring_var)
+            self.system_monitoring_checkbox.grid(row=8, column=1, padx=5, pady=5, sticky=tk.W)
 
-            # **New Checkbox for "Always on Top"**
-            ttk.Label(self, text="Always on Top:").grid(row=9, column=0, sticky=tk.W, padx=10, pady=5)
+            # **Checkbox for "Always on Top"**
+            ttk.Label(main_frame, text="Always on Top:").grid(row=9, column=0, sticky=tk.W, padx=5, pady=5)
             self.always_on_top_var = tk.BooleanVar(value=self.config.always_on_top)
-            self.always_on_top_checkbox = ttk.Checkbutton(self, variable=self.always_on_top_var)
-            self.always_on_top_checkbox.grid(row=9, column=1, padx=10, pady=5)
+            self.always_on_top_checkbox = ttk.Checkbutton(main_frame, variable=self.always_on_top_var)
+            self.always_on_top_checkbox.grid(row=9, column=1, padx=5, pady=5, sticky=tk.W)
 
             # Save and Cancel buttons
-            self.save_button = ttk.Button(self, text="Save", command=self.save_preferences)
-            self.save_button.grid(row=10, column=0, padx=10, pady=10, sticky=tk.E)
+            self.save_button = ttk.Button(main_frame, text="Save", command=self.save_preferences)
+            self.save_button.grid(row=10, column=0, padx=5, pady=15, sticky=tk.E)
 
-            self.cancel_button = ttk.Button(self, text="Cancel", command=self.destroy)
-            self.cancel_button.grid(row=10, column=1, padx=10, pady=10, sticky=tk.W)
+            self.cancel_button = ttk.Button(main_frame, text="Cancel", command=self.destroy)
+            self.cancel_button.grid(row=10, column=1, padx=5, pady=15, sticky=tk.W)
 
             # Tooltip for Save button
             create_tooltip(self.save_button, "Save your preferences")
 
-        except Exception as e:
+            # Configure padding for all children
+            for child in main_frame.winfo_children():
+                child.grid_configure(padx=5, pady=5)
+
+        except Exception as e:  # Add an except block to handle any exceptions
             sanitized_error = sanitize_message(str(e))
             logger.error(f"Error creating Preferences window widgets: {sanitized_error}", exc_info=True)
             messagebox.showerror("Error", f"Failed to create preferences window: {e}")
@@ -220,14 +232,23 @@ class PreferencesWindow(tk.Toplevel):
 
             # Update audio device index based on selected device name
             selected_device = self.audio_device_var.get()
-            device_index = int(selected_device.split(":")[0])  # Extract the index from "index: name"
-            if device_index != self.config.audio_device_index:
-                self.config.audio_device_index = device_index
-                logger.info(
-                    f"Audio device changed to {selected_device}",
+            if selected_device:
+                try:
+                    device_index = int(selected_device.split(":")[0])  # Extract the index from "index: name"
+                    if device_index != self.config.audio_device_index:
+                        self.config.audio_device_index = device_index
+                        logger.info(
+                            f"Audio device changed to {selected_device}",
+                            extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}
+                        )
+                        # Additional callback if needed for audio device changes
+                except ValueError:
+                    raise ValueError(f"Invalid audio device selection: {selected_device}")
+            else:
+                logger.warning(
+                    "No audio device selected.",
                     extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}
                 )
-                # Additional callback if needed for audio device changes
 
             # Update noise reduction
             self.config.enable_noise_reduction = self.noise_reduction_var.get()
@@ -240,24 +261,31 @@ class PreferencesWindow(tk.Toplevel):
             self.config.save_transcription = self.save_transcription_var.get()
 
             # Update key combination
-            self.config.key_combination = self.key_combination_var.get().split(" + ")
+            key_combination = self.key_combination_var.get().strip()
+            if key_combination:
+                self.config.key_combination = [key.strip() for key in key_combination.split("+")]
+            else:
+                raise ValueError("Key combination cannot be empty.")
 
             # Update system monitoring
             self.config.enable_system_monitoring = self.system_monitoring_var.get()
 
             # **Update Always on Top Setting**
-            self.config.always_on_top = self.always_on_top_var.get()
-            logger.info(
-                f"Always on Top set to {self.config.always_on_top}",
-                extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}
-            )
-            # **Invoke the callback to update the main window**
-            if self.apply_always_on_top_callback:
-                self.apply_always_on_top_callback(self.config.always_on_top)
+            new_always_on_top = self.always_on_top_var.get()
+            if new_always_on_top != self.config.always_on_top:
+                self.config.always_on_top = new_always_on_top
+                logger.info(
+                    f"'Always on Top' set to {self.config.always_on_top}",
+                    extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id}
+                )
+                # **Invoke the callback to update the main window**
+                if self.apply_always_on_top_callback:
+                    self.apply_always_on_top_callback(self.config.always_on_top)
 
             # Save the updated configuration
             save_config(self.config)
             logger.info("Preferences saved successfully.", extra={'correlation_id': self.correlation_id, 'trace_id': self.trace_id})
+            messagebox.showinfo("Success", "Preferences have been saved successfully.")
             self.destroy()
         except Exception as e:
             sanitized_error = sanitize_message(str(e))

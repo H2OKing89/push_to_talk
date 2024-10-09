@@ -163,3 +163,4 @@ cython_debug/
 logs/
 crash_reports/
 config.yaml
+transcriptions/

@@ -1,32 +1,48 @@
 # utils/helpers.py
 
+import sys
+import time
 import logging
-from state.state_manager import state
 from utils.logging_utils import sanitize_message
+from state import state
 
 logger = logging.getLogger(__name__)
 
-def graceful_shutdown():
-    """Gracefully shuts down the application."""
-    logger.info("Initiating graceful shutdown...", extra={'correlation_id': state.correlation_id})
-    # Add any cleanup or saving tasks here before exit
-    exit(0)
+def load_model_with_retry(load_function, model_name, retries=3, delay=2):
+    """
+    Attempts to load a model with a specified number of retries and delay between attempts.
 
-def load_model_with_retry(model_name, logger, correlation_id, trace_id):
-    """Attempts to load a model with retry logic."""
-    logger.info(f"Loading model {model_name} with retry logic", extra={'correlation_id': correlation_id, 'trace_id': trace_id})
-    try:
-        # Replace this part with actual model loading logic, for example:
-        # model = whisper.load_model(model_name)
-        import whisper  # Ensure whisper is imported
-        model = whisper.load_model(model_name)
-        if not model:
-            raise ValueError("Model loading failed.")
-        return model
-    except Exception as e:
-        sanitized_error = sanitize_message(str(e))
-        logger.error(
-            f"Failed to load model: {sanitized_error}",
-            extra={'correlation_id': correlation_id, 'trace_id': trace_id}
-        )
-        raise e
+    Args:
+        load_function (callable): The function to load the model.
+        model_name (str): The name of the model to load.
+        retries (int): Number of retry attempts.
+        delay (int): Delay between retries in seconds.
+
+    Returns:
+        The loaded model.
+
+    Raises:
+        Exception: If all retry attempts fail.
+    """
+    attempt = 0
+    while attempt < retries:
+        try:
+            model = load_function(model_name)
+            return model
+        except Exception as e:
+            attempt += 1
+            sanitized_error = sanitize_message(str(e))
+            logger.warning(
+                f"Attempt {attempt} to load model '{model_name}' failed: {sanitized_error}",
+                extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id},
+                exc_info=True
+            )
+            time.sleep(delay)
+    raise Exception(f"All {retries} attempts to load model '{model_name}' have failed.")
+
+def graceful_shutdown():
+    """
+    Gracefully shuts down the application.
+    """
+    logger.info("Gracefully shutting down the application...", extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id})
+    sys.exit(0)
