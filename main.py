@@ -297,8 +297,8 @@ class MainApplication:
             if self.gui.is_recording:
                 with lock:
                     audio_buffer.append(indata.copy())
-                # Update the waveform visualization
-                self.gui.update_waveform(indata.copy())
+                # Update the waveform visualization in the main thread
+                self.root.after(0, lambda: self.gui.update_waveform(indata.copy()))
                 logger.debug(
                     f"Captured {len(indata)} frames of audio.",
                     extra={'correlation_id': state.correlation_id, 'trace_id': state.trace_id}
@@ -311,7 +311,8 @@ class MainApplication:
                 exc_info=True
             )
             self.gui.update_status("Error")
-            messagebox.showerror("Error", f"Error during audio capture: {e}")
+            # Ensure that messagebox is called in the main thread
+            self.root.after(0, lambda: messagebox.showerror("Error", f"Error during audio capture: {e}"))
 
     def start_recording(self):
         """
@@ -398,7 +399,8 @@ class MainApplication:
                 exc_info=True
             )
             self.gui.update_status("Error")
-            messagebox.showerror("Error", f"Transcription failed: {e}")
+            # Ensure that messagebox is called in the main thread
+            self.root.after(0, lambda: messagebox.showerror("Error", f"Transcription failed: {e}"))
         finally:
             # Clear the audio buffer to delete temporary audio data
             with lock:
@@ -433,7 +435,8 @@ class MainApplication:
                     exc_info=True
                 )
                 self.gui.update_status("Error")
-                messagebox.showerror("Error", f"Key listener failed: {e}")
+                # Ensure that messagebox is called in the main thread
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Key listener failed: {e}"))
 
     def log_system_usage(self):
         """

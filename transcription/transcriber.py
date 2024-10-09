@@ -1,5 +1,3 @@
-# transcription/transcriber.py
-
 import logging
 import whisper
 import torch
@@ -78,6 +76,10 @@ class Transcriber:
                 retries=3,
                 delay=2
             )
+            
+            # **Assign the model's name**
+            self.model.name = model_name  # Manually set the model name here
+            
             return self.model
         except Exception as e:
             sanitized_error = sanitize_message(str(e))
