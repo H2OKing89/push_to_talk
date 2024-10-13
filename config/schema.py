@@ -42,6 +42,7 @@ class ConfigSchema(BaseModel):
     save_directory: str = "transcriptions"
     save_transcription: bool = False
     use_fp16: bool = True
+    use_gpu: bool = True
     noise_reduction_algorithm: Optional[str] = "noisereduce"
     recording_timeout: int = 60  # Default to 60 seconds
     

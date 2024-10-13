@@ -1,7 +1,7 @@
 # audio/notifications.py
 
 import logging
-from utils.logging_utils import sanitize_message  # Corrected import
+from utils import sanitize_message
 from tkinter import messagebox
 
 # Set up module-specific logger
