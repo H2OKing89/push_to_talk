@@ -164,3 +164,4 @@ logs/
 crash_reports/
 config.yaml
 transcriptions/
+myenv/
